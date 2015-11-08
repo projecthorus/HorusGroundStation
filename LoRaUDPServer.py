@@ -148,6 +148,7 @@ class LoRaTxRxCont(LoRa):
         rssi = self.get_pkt_rssi_value()
 #        print("Packet SNR: %.1f dB, RSSI: %d dB" % (snr, rssi))
         rxdata = self.read_payload(nocheck=True)
+        print("RX Packet!")
 
         self.udp_send_rx(rxdata,snr,rssi,pkt_flags)
 
@@ -188,6 +189,7 @@ class LoRaTxRxCont(LoRa):
         # For some reason, if we start reading the IRP flags immediately, the TX can
         # abort prematurely. Dunno why yet.
         sleep(1)
+        # Can probably fix this by, y'know, using interrupt lines properly.
         while(self.get_irq_flags()["tx_done"]==False):
             pass
 

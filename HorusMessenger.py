@@ -64,13 +64,18 @@ def process_udp(udp_packet):
 				(source,message) = read_text_message_packet(packet_dict['payload'])
 				line = "< %8s > %s" % (source,message)
 				rxqueue.put_nowait(line)
-		elif packet_dict['type'] == 'RX':
+		elif packet_dict['type'] == 'RXPKT':
 			if(packet_dict['payload'][0] == HORUS_PACKET_TYPES.TEXT_MESSAGE):
+				print packet_dict['payload']
 				(source,message) = read_text_message_packet(packet_dict['payload'])
-				line = "< %8s > %s" % (source,message)
+				if source == str(callsignBox.text()) and decode_payload_flags(packet_dict['payload'])['is_repeated']:
+					line = "(repeat) < %8s > %s" % (source,message)
+				else:
+					line = "< %8s > %s" % (source,message)
 				rxqueue.put_nowait(line)
 			else:
 				print("Got other packet type...")
+				print packet_dict['payload']
 		else:
 			pass
 	except:
