@@ -116,11 +116,13 @@ class LoRaTxRxCont(LoRa):
         self.set_agc_auto_on(True)
         self.set_detect_optimize(0x03)
         self.set_detection_threshold(0x0A)
+        self.set_dio_mapping([0] * 6)
         self.set_mode(MODE.RXCONT)
 
     def set_tx_mode(self):
         self.set_lna_gain(GAIN.G6)
         self.set_pa_config(pa_select=1,max_power=0,output_power=0x0F) # 50mW
+
         self.set_mode(MODE.TX)
 
     def udp_broadcast(self,data):
@@ -178,11 +180,13 @@ class LoRaTxRxCont(LoRa):
         self.set_mode(MODE.STDBY)
         self.set_lna_gain(GAIN.G6)
         self.set_pa_config(pa_select=1,max_power=0,output_power=0x0F) # 50mW
+        self.set_dio_mapping([1,0,0,0,0,0])
         self.set_payload_length(len(data))
         self.write_payload(list(bytearray(data)))
         print(self.get_payload_length())
         # Transmit!
         tx_timestamp = datetime.utcnow().isoformat()
+        print(datetime.utcnow().isoformat())
         self.set_mode(MODE.TX)
         # Busy-wait until tx_done is raised.
         print "Waiting for transmit to finish..."
@@ -190,9 +194,11 @@ class LoRaTxRxCont(LoRa):
         # abort prematurely. Dunno why yet.
         sleep(1)
         # Can probably fix this by, y'know, using interrupt lines properly.
-        while(self.get_irq_flags()["tx_done"]==False):
+        #while(self.get_irq_flags()["tx_done"]==False):
+        while(self.spi.read_gpio()[0] == 0):
             pass
 
+        print(datetime.utcnow().isoformat())
         # Broadast a UDP packet indicating we have just transmitted.
         tx_indication = {
             'type'  : "TXDONE",
@@ -201,7 +207,7 @@ class LoRaTxRxCont(LoRa):
         }
         self.udp_broadcast(tx_indication)
 
-        self.set_mode(MODE.STDBY)
+        #self.set_mode(MODE.STDBY)
         self.clear_irq_flags()
         self.set_rx_mode()
         print("Done.")
@@ -280,7 +286,8 @@ class LoRaTxRxCont(LoRa):
             #sys.stdout.flush()
             #sys.stdout.write("\r%d %d %d" % (rssi_value, status['rx_ongoing'], status['signal_detected']))
 
-            if(self.get_irq_flags()["rx_done"]==True):
+            #if(self.get_irq_flags()["rx_done"]==True):
+            if(self.spi.read_gpio()[0] == 1):
                 self.on_rx_done()
 
             if(self.txqueue.qsize()>0):

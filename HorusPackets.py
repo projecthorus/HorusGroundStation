@@ -67,48 +67,56 @@ def read_text_message_packet(packet):
     message = packet[10:].rstrip('\n\0')
     return (source,message)
 
-# Binary Payload Telemetry
-binarypacketformat = "<BHHffHBBBB"
-binarypacketlength = 19
 
-def decode_horus_payload_telemetry(data):
+# PAYLOAD TELEMETRY PACKET
+# This one is in a bit of flux at the moment.
+# Payload Format:
+# struct TBinaryPacket
+# {
+#   uint8_t   PacketType;
+#   uint8_t   PayloadFlags;
+#   uint8_t     PayloadIDs;
+#   uint16_t    Counter;
+#   uint16_t    BiSeconds;
+#   float       Latitude;
+#   float       Longitude;
+#   uint16_t    Altitude;
+#   uint8_t   Speed; // Speed in Knots (1-255 knots)
+#   uint8_t   BattVoltage; // 0 = 0.5v, 255 = 2.0V, linear steps in-between.
+#   uint8_t   Sats;
+#   uint8_t   Temp; // Twos Complement Temp value.
+# };  //  __attribute__ ((packed));
+
+def decode_horus_payload_telemetry(packet):
+    packet = str(bytearray(packet))
+
+    horus_format_struct = "<BBBHHffHBBBB"
     try:
-        unpacked = struct.unpack(binarypacketformat, data)
+        unpacked = struct.unpack(horus_format_struct, packet)
     except:
         print "Wrong string length. Packet contents:"
         print ":".join("{:02x}".format(ord(c)) for c in data)
-        return
+        return {}
 
-    payload_id = unpacked[0]
-    counter = unpacked[1]
-    time_biseconds = unpacked[2]
-    latitude = unpacked[3]
-    longitude = unpacked[4]
-    altitude = unpacked[5]
-    speed = unpacked[6]
-    batt_voltage = unpacked[7]
-    sats = unpacked[8]
-    temp = unpacked[9]
+    telemetry = {}
+    telemetry['packet_type'] = unpacked[0]
+    telemetry['payload_flags'] = unpacked[1]
+    telemetry['payload_id'] = unpacked[2]
+    telemetry['counter'] = unpacked[3]
+    telemetry['time_biseconds'] = unpacked[4]
+    telemetry['latitude'] = unpacked[5]
+    telemetry['longitude'] = unpacked[6]
+    telemetry['altitude'] = unpacked[7]
+    telemetry['speed'] = unpacked[8]
+    telemetry['batt_voltage_raw'] = unpacked[9]
+    telemetry['sats'] = unpacked[10]
+    telemetry['temp'] = unpacked[11]
 
+    # Convert some of the fields into more useful units.
+    telemetry['time'] = time.strftime("%H:%M:%S", time.gmtime(telemetry['time_biseconds']*2))
+    telemetry['batt_voltage'] = 0.5 + 1.5*telemetry['batt_voltage_raw']/255.0
 
-    time_string = time.strftime("%H:%M:%S", time.gmtime(time_biseconds*2))
-
-    batt_voltage_float = 0.5 + 1.5*batt_voltage/255.0
-
-    #print "Decoded Packet: %s  %f,%f %d %.2f %d" % (time_string, latitude, longitude, altitude, speed*1.852, sats)
-
-    print "\n\nDecoded Packet: %s" % (":".join("{:02x}".format(ord(c)) for c in data))
-    print "      ID: %d" % payload_id
-    print " Seq No.: %d" % counter
-    print "    Time: %s" % time_string
-    print "     Lat: %.5f" % latitude
-    print "     Lon: %.5f" % longitude
-    print "     Alt: %d m" % altitude
-    print "   Speed: %.1f kph" % (speed*1.852)
-    print "    Sats: %d" % sats
-    print "    Batt: %.3f" % batt_voltage_float
-    print "    Temp: %d" % temp
-    print " "
+    return telemetry
 
 
 # UDP Helper Methods
