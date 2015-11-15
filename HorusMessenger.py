@@ -68,7 +68,7 @@ def process_udp(udp_packet):
 			if(packet_dict['payload'][0] == HORUS_PACKET_TYPES.TEXT_MESSAGE):
 				print packet_dict['payload']
 				(source,message) = read_text_message_packet(packet_dict['payload'])
-				if source == str(callsignBox.text()) and decode_payload_flags(packet_dict['payload'])['is_repeated']:
+				if decode_payload_flags(packet_dict['payload'])['is_repeated']:
 					line = "(repeat) < %8s > %s" % (source,message)
 				else:
 					line = "< %8s > %s" % (source,message)
