@@ -110,6 +110,9 @@ class LoRaTxRxCont(LoRa):
         self.txqueue = Queue.Queue(16)
         self.udp_listener_running = False
 
+        self.status_counter = 0
+        self.status_throttle = 20
+
 
     def set_common(self):
         self.set_mode(MODE.STDBY)
@@ -188,6 +191,15 @@ class LoRaTxRxCont(LoRa):
         if len(data)>self.max_payload:
             data = data[:self.max_payload]
 
+        tx_timestamp = datetime.utcnow().isoformat()
+        # Broadast a UDP packet indicating we have a packet queued for transmit.
+        tx_indication = {
+            'type'  : "TXQUEUED",
+            'timestamp' : tx_timestamp,
+            'payload' : list(bytearray(data))
+        }
+        self.udp_broadcast(tx_indication)
+
         print("Transmitting: %s" % data)
         # Write payload into fifo.
         self.set_mode(MODE.STDBY)
@@ -258,7 +270,7 @@ class LoRaTxRxCont(LoRa):
             try:
                 m = s.recvfrom(1024)
             except:
-                pass
+                m = None
 
             if m != None:
                 try:
@@ -287,14 +299,17 @@ class LoRaTxRxCont(LoRa):
             rssi_value = self.get_rssi_value()
             status = self.get_modem_status()
 
-            # Generate dictionary to broadcast
-            status_dict = {
-                'type'  : "STATUS",
-                "timestamp" : datetime.utcnow().isoformat(),
-                'rssi'  : rssi_value,
-                'status': status
-            }
-            self.udp_broadcast(status_dict)
+            # Don't flood the users with status packets. 
+            self.status_counter += 1
+            if self.status_counter % self.status_throttle == 0:
+                # Generate dictionary to broadcast
+                status_dict = {
+                    'type'  : "STATUS",
+                    "timestamp" : datetime.utcnow().isoformat(),
+                    'rssi'  : rssi_value,
+                    'status': status
+                }
+                self.udp_broadcast(status_dict)
 
             #sys.stdout.flush()
             #sys.stdout.write("\r%d %d %d" % (rssi_value, status['rx_ongoing'], status['signal_detected']))

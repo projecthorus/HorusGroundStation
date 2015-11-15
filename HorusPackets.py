@@ -6,6 +6,7 @@
 #
 
 import time, struct, json, socket
+from datetime import datetime
 
 HORUS_UDP_PORT = 55672
 
@@ -118,9 +119,7 @@ def decode_horus_payload_telemetry(packet):
 
     return telemetry
 
-
-# UDP Helper Methods
-
+# Transmit packet via UDP Broadcast
 def tx_packet(packet):
     packet = {
         'type' : 'TXPKT',
@@ -131,3 +130,61 @@ def tx_packet(packet):
     s.setsockopt(socket.SOL_SOCKET,socket.SO_BROADCAST,1)
     s.sendto(json.dumps(packet),('255.255.255.255',HORUS_UDP_PORT))
     s.close()
+
+# Produce short string representation of packet payload contents.
+def payload_to_string(packet):
+    payload_type = decode_payload_type(packet)
+
+    if payload_type == HORUS_PACKET_TYPES.PAYLOAD_TELEMETRY:
+        telemetry = decode_horus_payload_telemetry(packet)
+        data = "Balloon Telemetry: %s,%d,%.5f,%.5f,%d,%d" % (telemetry['time'],telemetry['counter'],
+            telemetry['latitude'],telemetry['longitude'],telemetry['altitude'],telemetry['sats'])
+        return data
+    elif payload_type == HORUS_PACKET_TYPES.TEXT_MESSAGE:
+        (source, message) = read_text_message_packet(packet)
+        flags = decode_payload_flags(packet)
+        if flags['is_repeated']:
+            data = "Repeated Text Message: <%s> %s" % (source,message)
+        else:
+            data = "Text Message: <%s> %s" % (source,message)
+        return data
+    elif payload_type == HORUS_PACKET_TYPES.CUTDOWN_COMMAND:
+        return "Cutdown Command: <Not Implemented>"
+    else:
+        return "Unknown Payload"
+
+def udp_packet_to_string(udp_packet):
+    try:
+        pkt_type = udp_packet['type']
+    except Exception as e:
+        return "Unknown UDP Packet"
+
+    if pkt_type == "RXPKT":
+        timestamp = udp_packet['timestamp']
+        rssi = float(udp_packet['rssi'])
+        snr = float(udp_packet['snr'])
+        crc_ok = udp_packet['pkt_flags']['crc_error'] == 0
+        if crc_ok:
+            payload_str = payload_to_string(udp_packet['payload'])
+        else:
+            payload_str = "CRC Fail!"
+        return "%s RXPKT \tRSSI: %.1f SNR: %.1f \tPayload:[%s]" % (timestamp,rssi,snr,payload_str)
+    elif pkt_type == "STATUS":
+        timestamp = udp_packet['timestamp']
+        rssi = float(udp_packet['rssi'])
+        # Insert Modem Status decoding code here.
+        return "%s STATUS \tRSSI: %.1f" % (timestamp,rssi)
+    elif pkt_type == "TXPKT":
+        timestamp = datetime.utcnow().isoformat()
+        payload_str = payload_to_string(udp_packet['payload'])
+        return "%s TXPKT \tPayload:[%s]" % (timestamp,payload_str)
+    elif pkt_type == "TXDONE":
+        timestamp = udp_packet['timestamp']
+        payload_str = payload_to_string(udp_packet['payload'])
+        return "%s TXDONE \tPayload:[%s]" % (timestamp,payload_str)
+    elif pkt_type == "TXQUEUED":
+        timestamp = udp_packet['timestamp']
+        payload_str = payload_to_string(udp_packet['payload'])
+        return "%s TXQUEUED \tPayload:[%s]" % (timestamp,payload_str)
+    else:
+        return "Not Implemented"

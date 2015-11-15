@@ -9,21 +9,13 @@
 from HorusPackets import *
 import socket,json,sys,Queue
 
+udp_listener_running = False
+
 def process_udp(udp_packet):
 	try:
 		packet_dict = json.loads(udp_packet)
-		if packet_dict['pkt_flags']['crc_error'] == 1:
-			return
-		if packet_dict['type'] == 'RXPKT':
-			if(packet_dict['payload'][0] == HORUS_PACKET_TYPES.PAYLOAD_TELEMETRY):
-				print packet_dict['payload']
-				telemetry = decode_horus_payload_telemetry(packet_dict['payload'])
-				print(telemetry)
-			else:
-				print("Got other packet type...")
-				print packet_dict['payload']
-		else:
-			pass
+		
+		print(udp_packet_to_string(packet_dict))
 	except:
 		pass
 
@@ -38,13 +30,16 @@ def udp_rx_thread():
 	while udp_listener_running:
 		try:
 			m = s.recvfrom(1024)
-			if m != None:
+		except socket.timeout:
+			m = None
+		
+		if m != None:
 				process_udp(m[0])
-		except Exception as e:
-			print(e)
-			print("ERROR: Received Malformed UDP Packet")
 	
 	print("Closing UDP Listener")
 	s.close()
 
-udp_rx_thread()
+try:
+	udp_rx_thread()
+except KeyboardInterrupt:
+	print("Closing.")
