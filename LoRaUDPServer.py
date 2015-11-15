@@ -82,13 +82,16 @@ parser = argparse.ArgumentParser()
 group = parser.add_mutually_exclusive_group()
 group.add_argument("--rpishield", action="store_true")
 group.add_argument("--spibridge", action="store_true")
+group.add_argument("-d" ,"--rpidevice", type=int, default=1)
 args = parser.parse_args()
 
 # Choose hardware interface
 if args.spibridge:
     from SX127x.hardware_spibridge import HardwareInterface
+    hw = HardwareInterface()
 elif args.rpishield:
     from SX127x.hardware_piloragateway import HardwareInterface
+    hw = HardwareInterface(args.rpidevice)
 else:
     sys.exit(1)
 
@@ -305,7 +308,6 @@ class LoRaTxRxCont(LoRa):
                 self.attemptTX()
 
 
-hw = HardwareInterface()
 lora = LoRaTxRxCont(hw,verbose=False)
 #lora.set_pa_config(max_power=0, output_power=0)
 
