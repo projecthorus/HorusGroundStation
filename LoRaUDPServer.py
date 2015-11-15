@@ -30,7 +30,7 @@
 #   TRANSMIT PACKET
 #   Packet to be transmitted by the LoRa server. Is added to a queue and transmitted when channel is clear.
 #   ---------------
-#   transmit_packet = {
+#   {
 #       'type' : 'TXPKT',
 #       'payload' : [<payload as a list of bytes>] # Encode this using list(bytearray('string'))
 #   }
@@ -38,7 +38,7 @@
 #   TRANSMIT CONFIRMATION
 #   Sent when a packet has been transmitted.
 #   ---------------------
-#   tx_confirmation = {
+#   {
 #     'type' : 'TXDONE',
 #     'timestamp' : '<ISO-8601 formatted timestamp>',
 #     'payload' : [<payload as a list of bytes>]
@@ -47,7 +47,7 @@
 #   STATUS PACKET
 #   Broadcast frequently (5Hz or so) to indicate current modem status, for RSSI plotting or similar.
 #   -------------
-#   status_packet = {
+#   {
 #       'type' : 'STATUS',
 #       'timestamp : '<ISO-8601 formatted timestamp>',
 #       'rssi' : <Current RSSI in dB>,
@@ -58,13 +58,26 @@
 #   Broacast whenever a LoRa packet is received
 #   Packets are sent out even if the CRC failed. CRC info is available in the 'pkt_flags' dict.
 #   --------------
-#   rx_data_packet = {
+#   {
 #     'type' : 'RXPKT',
 #     'timestamp' : '<ISO-8601 formatted timestamp>',
 #     'rssi' : <Current RSSI in dB>,
 #     'snr'  : <Packet SNR in dB>,
 #     'payload' : [<payload as a list of bytes>],
 #     'pkt_flags' : {LoRa IRQ register flags at time of packet RX}# pkt_flags["crc_error"] == 0 if CRC is ok.
+#   }
+#
+#   PING
+#   Ping this server to check it is running.
+#   ---
+#   
+#       'type' : 'PING',
+#       'data' : '<Arbitrary data>'
+#   }
+#   This server immediately responds with:
+#   {
+#       'type' : 'PONG',
+#       'data' : '<Copy of whatever was in the PING packet>'
 #   }
 #
 
@@ -275,8 +288,19 @@ class LoRaTxRxCont(LoRa):
             if m != None:
                 try:
                     m_data = json.loads(m[0])
+                    # Packet to be transmitted.
                     if m_data['type'] == 'TXPKT':
                         self.txqueue.put_nowait(m_data['payload']) # TODO: Data type checking.
+                    # Just a check to see if we are alive. Respond immediately.
+                    elif m_data['type'] == 'PING':
+                        try:
+                            ping_response = {
+                                'type'  : "PONG",
+                                'data' : m_data['data']
+                            }
+                            self.udp_broadcast(ping_response)
+                    else:
+                        pass
                 except Exception as e:
                     print(e)
                     print("ERROR: Received Malformed UDP Packet")

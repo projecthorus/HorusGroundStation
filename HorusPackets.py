@@ -34,7 +34,7 @@ def decode_payload_flags(packet):
     # Payload flags is always the second byte.
     payload_flags_byte = packet[1]
     payload_flags = {
-        'src_addr'    : payload_flags_byte >> 4,          # Not currently used.
+        'repeater_id'    : payload_flags_byte >> 4,     # Repeating payload inserts a unique ID in here
         'is_repeated' : payload_flags_byte >> 0 & 0x01,   # Indicates a packet repeated off a payload.
     }
     return payload_flags

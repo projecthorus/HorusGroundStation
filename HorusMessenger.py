@@ -8,6 +8,7 @@
 from HorusPackets import *
 from threading import Thread
 from PyQt4 import QtGui, QtCore
+from datetime import datetime
 import socket,json,sys,Queue
 
 udp_broadcast_port = HORUS_UDP_PORT
@@ -21,6 +22,7 @@ txed_packets = []
 app = QtGui.QApplication([])
 
 # Widgets
+statusLabel = QtGui.QLabel("No updates yet..")
 console = QtGui.QPlainTextEdit()
 console.setReadOnly(True)
 callsignBox = QtGui.QLineEdit("N0CALL")
@@ -31,15 +33,16 @@ messageBox.setMaxLength(55)
 
 # Create and Lay-out window
 win = QtGui.QWidget()
-win.resize(500,200)
+win.resize(600,200)
 win.show()
 win.setWindowTitle("Horus Messenger")
 layout = QtGui.QGridLayout()
 win.setLayout(layout)
 # Add Widgets
-layout.addWidget(console,0,0,1,4)
-layout.addWidget(callsignBox,1,0,1,1)
-layout.addWidget(messageBox,1,1,1,3)
+layout.addWidget(statusLabel,0,0,1,4)
+layout.addWidget(console,1,0,1,4)
+layout.addWidget(callsignBox,2,0,1,1)
+layout.addWidget(messageBox,2,1,1,3)
 
 # Send a message!
 def send_message():
@@ -58,26 +61,38 @@ def process_udp(udp_packet):
 	try:
 		packet_dict = json.loads(udp_packet)
 
+		# Start every line with a timestamp
+		line = datetime.utcnow().strftime("%H:%M ")
+
 		# TX Confirmation Packet?
 		if packet_dict['type'] == 'TXDONE':
 			if(packet_dict['payload'][0] == HORUS_PACKET_TYPES.TEXT_MESSAGE):
 				(source,message) = read_text_message_packet(packet_dict['payload'])
-				line = "< %8s > %s" % (source,message)
-				rxqueue.put_nowait(line)
+				line += "<%8s> %s" % (source,message)
+				console.appendPlainText(line)
 		elif packet_dict['type'] == 'RXPKT':
 			if(packet_dict['payload'][0] == HORUS_PACKET_TYPES.TEXT_MESSAGE):
+				rssi = float(packet_dict['rssi'])
+				snr = float(packet_dict['snr'])
 				print packet_dict['payload']
 				(source,message) = read_text_message_packet(packet_dict['payload'])
-				if decode_payload_flags(packet_dict['payload'])['is_repeated']:
-					line = "(repeat) < %8s > %s" % (source,message)
+
+				payload_flags = decode_payload_flags(packet_dict['payload'])
+				if payload_flags['is_repeated']:
+					line += "<%8s via #%d>" % (source,payload_flags['repeater_id'])
 				else:
-					line = "< %8s > %s" % (source,message)
-				rxqueue.put_nowait(line)
-			else:
-				print("Got other packet type...")
-				print packet_dict['payload']
+					line += "<%8s>" % (source)
+
+				line += " [R:%.1f S:%.1f] %s" % (rssi,snr,message)
+				console.appendPlainText(line)
+		elif packet_dict['type'] == 'STATUS':
+			rssi = float(packet_dict['rssi'])
+			timestamp = packet_dict['timestamp']
+			status_text = "%s RSSI: %.1f dBm" % (timestamp,rssi)
+			statusLabel.setText(status_text)
 		else:
-			pass
+			print("Got other packet type...")
+			print packet_dict['payload']
 	except:
 		pass
 
@@ -92,11 +107,11 @@ def udp_rx_thread():
 	while udp_listener_running:
 		try:
 			m = s.recvfrom(1024)
-			if m != None:
-				process_udp(m[0])
-		except Exception as e:
-			print(e)
-			print("ERROR: Received Malformed UDP Packet")
+		except socket.timeout:
+			m = None
+		
+		if m != None:
+			rxqueue.put_nowait(m[0])
 	
 	print("Closing UDP Listener")
 	s.close()
@@ -106,8 +121,8 @@ t.start()
 
 def read_queue():
 	try:
-		line = rxqueue.get_nowait()
-		console.appendPlainText(line)
+		packet = rxqueue.get_nowait()
+		process_udp(packet)
 	except:
 		pass
 
