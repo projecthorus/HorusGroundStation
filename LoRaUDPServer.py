@@ -68,7 +68,7 @@
 #   }
 #
 
-import json,socket,Queue,random
+import json,socket,Queue,random, argparse, sys
 from time import sleep
 from threading import Thread
 from HorusPackets import *
@@ -76,11 +76,21 @@ from datetime import *
 
 
 from SX127x.LoRa import *
-from SX127x.LoRaArgumentParser import LoRaArgumentParser
+#from SX127x.LoRaArgumentParser import LoRaArgumentParser
+
+parser = argparse.ArgumentParser()
+group = parser.add_mutually_exclusive_group()
+group.add_argument("--rpishield", action="store_true")
+group.add_argument("--spibridge", action="store_true")
+args = parser.parse_args()
 
 # Choose hardware interface
-from SX127x.hardware_spibridge import HardwareInterface
-#from SX127x.hardware_piloragateway import HardwareInterface
+if args.spibridge:
+    from SX127x.hardware_spibridge import HardwareInterface
+elif args.rpishield:
+    from SX127x.hardware_piloragateway import HardwareInterface
+else:
+    sys.exit(1)
 
 
 
@@ -195,7 +205,7 @@ class LoRaTxRxCont(LoRa):
         sleep(1)
         # Can probably fix this by, y'know, using interrupt lines properly.
         #while(self.get_irq_flags()["tx_done"]==False):
-        while(self.spi.read_gpio()[0] == 0):
+        while(self.BOARD.read_gpio()[0] == 0):
             pass
 
         print(datetime.utcnow().isoformat())
@@ -287,7 +297,7 @@ class LoRaTxRxCont(LoRa):
             #sys.stdout.write("\r%d %d %d" % (rssi_value, status['rx_ongoing'], status['signal_detected']))
 
             #if(self.get_irq_flags()["rx_done"]==True):
-            if(self.spi.read_gpio()[0] == 1):
+            if(self.BOARD.read_gpio()[0] == 1):
                 self.on_rx_done()
 
             if(self.txqueue.qsize()>0):
