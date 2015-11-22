@@ -18,6 +18,10 @@ class HORUS_PACKET_TYPES:
     PARAMETER_CHANGE      = 3
     COMMAND_ACK           = 4
 
+class HORUS_PAYLOAD_PARAMS:
+    PING                  = 0
+    LISTEN_TIME           = 1
+
 
 # Some utilities to use in other programs.
 def decode_payload_type(packet):
@@ -130,6 +134,65 @@ def decode_horus_payload_telemetry(packet):
 
     return telemetry
 
+# Command ACK Packet. Sent by the payload to acknowledge a command (i.e. cutdown or param change) has been executed.
+def decode_command_ack(packet):
+    packet = list(bytearray(packet))
+    if len(packet) != 7:
+        print "Invalid length for Command ACK."
+        return {}
+
+    ack_packet = {}
+    ack_packet['rssi'] = packet[2] - 157
+    ack_packet['snr'] = struct.unpack('b',str(bytearray([packet[3]])))[0]/4.
+    if packet[4] == HORUS_PACKET_TYPES.CUTDOWN_COMMAND:
+        ack_packet['command'] = "Cutdown"
+        ack_packet['argument'] = "%d Seconds." % packet[5]
+    elif packet[4] == HORUS_PACKET_TYPES.PARAMETER_CHANGE:
+        ack_packet['command'] = "Param Change"
+        ack_packet['argument'] = "%d %d" % (packet[5], packet[6])
+        ack_packet['param'] = packet[5]
+        ack_packet['value'] = packet[6]
+
+    return ack_packet
+
+def create_cutdown_packet(time=4,passcode="zzz"):
+    if len(passcode)<3: # Pad out passcode. This will probably cause the payload not to accept it though.
+        passcode = passcode + "   "
+
+    # Sanitize cut time.
+    if time>10:
+        time = 10
+    if time<0:
+        time = 0
+
+    cutdown_packet = [HORUS_PACKET_TYPES.CUTDOWN_COMMAND,0,0,0,0,0]
+    cutdown_packet[2] = ord(passcode[0])
+    cutdown_packet[3] = ord(passcode[1])
+    cutdown_packet[4] = ord(passcode[2])
+    cutdown_packet[5] = time
+
+    return cutdown_packet
+
+def create_param_change_packet(param = HORUS_PAYLOAD_PARAMS.PING, value = 10, passcode = "zzz"):
+    if len(passcode)<3: # Pad out passcode. This will probably cause the payload not to accept it though.
+        passcode = passcode + "   "
+    # Sanitize parameter and value inputs.
+    if param>255:
+        param = 255
+
+    if value>255:
+        value = 255
+
+    param_packet = [HORUS_PACKET_TYPES.PARAMETER_CHANGE,0,0,0,0,0,0]
+    param_packet[2] = ord(passcode[0])
+    param_packet[3] = ord(passcode[1])
+    param_packet[4] = ord(passcode[2])
+    param_packet[5] = param
+    param_packet[6] = value
+
+    return param_packet
+
+
 # Transmit packet via UDP Broadcast
 def tx_packet(packet):
     packet = {
@@ -161,6 +224,11 @@ def payload_to_string(packet):
         return data
     elif payload_type == HORUS_PACKET_TYPES.CUTDOWN_COMMAND:
         return "Cutdown Command: <Not Implemented>"
+
+    elif payload_type == HORUS_PACKET_TYPES.COMMAND_ACK:
+        ack = decode_command_ack(packet)
+        data = "Command ACK: [R: %d dBm, S:%.1fdB] %s %s" % (ack['rssi'], ack['snr'], ack['command'], ack['argument'])
+        return data
     else:
         return "Unknown Payload"
 

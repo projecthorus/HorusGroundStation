@@ -228,13 +228,14 @@ class LoRaTxRxCont(LoRa):
         self.set_mode(MODE.TX)
         # Busy-wait until tx_done is raised.
         print "Waiting for transmit to finish..."
-        # For some reason, if we start reading the IRP flags immediately, the TX can
+        # For some reason, if we start reading the IRQ flags immediately, the TX can
         # abort prematurely. Dunno why yet.
         sleep(0.5)
         # Can probably fix this by, y'know, using interrupt lines properly.
         #while(self.get_irq_flags()["tx_done"]==False):
         while(self.BOARD.read_gpio()[0] == 0):
             pass
+        #self.set_mode(MODE.STDBY)
         self.clear_irq_flags()
         self.set_rx_mode()
         
