@@ -15,6 +15,8 @@ class HORUS_PACKET_TYPES:
     PAYLOAD_TELEMETRY     = 0
     TEXT_MESSAGE          = 1
     CUTDOWN_COMMAND       = 2
+    PARAMETER_CHANGE      = 3
+    COMMAND_ACK           = 4
 
 
 # Some utilities to use in other programs.
@@ -76,22 +78,26 @@ def read_text_message_packet(packet):
 # {
 #   uint8_t   PacketType;
 #   uint8_t   PayloadFlags;
-#   uint8_t     PayloadIDs;
-#   uint16_t    Counter;
-#   uint16_t    BiSeconds;
-#   float       Latitude;
-#   float       Longitude;
-#   uint16_t    Altitude;
+#     uint8_t     PayloadIDs;
+#     uint16_t    Counter;
+#     uint16_t    BiSeconds;
+#     float       Latitude;
+#     float       Longitude;
+#     uint16_t    Altitude;
 #   uint8_t   Speed; // Speed in Knots (1-255 knots)
-#   uint8_t   BattVoltage; // 0 = 0.5v, 255 = 2.0V, linear steps in-between.
 #   uint8_t   Sats;
 #   uint8_t   Temp; // Twos Complement Temp value.
+#   uint8_t   BattVoltage; // 0 = 0.5v, 255 = 2.0V, linear steps in-between.
+#   uint8_t   PyroVoltage; // 0 = 0v, 255 = 5.0V, linear steps in-between.
+#   uint8_t   rxPktCount; // RX Packet Count.
+#   uint8_t   rxRSSI; // Ambient RSSI value, measured just before transmission.
+#   uint8_t   telemFlags; // Various payload flags, TBD
 # };  //  __attribute__ ((packed));
 
 def decode_horus_payload_telemetry(packet):
     packet = str(bytearray(packet))
 
-    horus_format_struct = "<BBBHHffHBBBB"
+    horus_format_struct = "<BBBHHffHBBBBBBBB"
     try:
         unpacked = struct.unpack(horus_format_struct, packet)
     except:
@@ -109,13 +115,18 @@ def decode_horus_payload_telemetry(packet):
     telemetry['longitude'] = unpacked[6]
     telemetry['altitude'] = unpacked[7]
     telemetry['speed'] = unpacked[8]
-    telemetry['batt_voltage_raw'] = unpacked[9]
-    telemetry['sats'] = unpacked[10]
-    telemetry['temp'] = unpacked[11]
+    telemetry['sats'] = unpacked[9]
+    telemetry['temp'] = unpacked[10]
+    telemetry['batt_voltage_raw'] = unpacked[11]
+    telemetry['pyro_voltage_raw'] = unpacked[12]
+    telemetry['rxPktCount'] = unpacked[13]
+    telemetry['RSSI'] = unpacked[14]-157
+    telemetry['telemFlags'] = unpacked[15]
 
     # Convert some of the fields into more useful units.
     telemetry['time'] = time.strftime("%H:%M:%S", time.gmtime(telemetry['time_biseconds']*2))
     telemetry['batt_voltage'] = 0.5 + 1.5*telemetry['batt_voltage_raw']/255.0
+    telemetry['pyro_voltage'] = 5.0*telemetry['pyro_voltage_raw']/255.0
 
     return telemetry
 
@@ -137,8 +148,8 @@ def payload_to_string(packet):
 
     if payload_type == HORUS_PACKET_TYPES.PAYLOAD_TELEMETRY:
         telemetry = decode_horus_payload_telemetry(packet)
-        data = "Balloon Telemetry: %s,%d,%.5f,%.5f,%d,%d" % (telemetry['time'],telemetry['counter'],
-            telemetry['latitude'],telemetry['longitude'],telemetry['altitude'],telemetry['sats'])
+        data = "Balloon Telemetry: %s,%d,%.5f,%.5f,%d,%d,%.2f,%.2f,%d,%d" % (telemetry['time'],telemetry['counter'],
+            telemetry['latitude'],telemetry['longitude'],telemetry['altitude'],telemetry['sats'],telemetry['batt_voltage'],telemetry['pyro_voltage'],telemetry['rxPktCount'],telemetry['RSSI'])
         return data
     elif payload_type == HORUS_PACKET_TYPES.TEXT_MESSAGE:
         (source, message) = read_text_message_packet(packet)
