@@ -93,18 +93,18 @@ from SX127x.LoRa import *
 
 parser = argparse.ArgumentParser()
 group = parser.add_mutually_exclusive_group()
-group.add_argument("--rpishield", action="store_true")
-group.add_argument("--spibridge", action="store_true")
-group.add_argument("-d" ,"--rpidevice", type=int, default=1)
+group.add_argument("--rpishield", action="store_true", help="Use a PiLoraGateway RPI Shield.")
+group.add_argument("--spibridge", action="store_true", help="Use a Arduino+LoRa Shield running SPIBridge Firmware.")
+parser.add_argument("-d" ,"--device", default="1", help="Hardware Device, either a serial port (i.e. /dev/ttyUSB0 or COM5) or SPI device number (i.e. 1)")
 args = parser.parse_args()
 
 # Choose hardware interface
 if args.spibridge:
     from SX127x.hardware_spibridge import HardwareInterface
-    hw = HardwareInterface()
+    hw = HardwareInterface(port=args.device)
 elif args.rpishield:
     from SX127x.hardware_piloragateway import HardwareInterface
-    hw = HardwareInterface(args.rpidevice)
+    hw = HardwareInterface(int(args.device))
 else:
     sys.exit(1)
 
@@ -293,7 +293,6 @@ class LoRaTxRxCont(LoRa):
                         self.txqueue.put_nowait(m_data['payload']) # TODO: Data type checking.
                     # Just a check to see if we are alive. Respond immediately.
                     elif m_data['type'] == 'PING':
-                        try:
                             ping_response = {
                                 'type'  : "PONG",
                                 'data' : m_data['data']
