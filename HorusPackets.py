@@ -223,12 +223,14 @@ def payload_to_string(packet):
             data = "Text Message: <%s> %s" % (source,message)
         return data
     elif payload_type == HORUS_PACKET_TYPES.CUTDOWN_COMMAND:
-        return "Cutdown Command: <Not Implemented>"
+        return "Cutdown Command"
 
     elif payload_type == HORUS_PACKET_TYPES.COMMAND_ACK:
         ack = decode_command_ack(packet)
         data = "Command ACK: [R: %d dBm, S:%.1fdB] %s %s" % (ack['rssi'], ack['snr'], ack['command'], ack['argument'])
         return data
+    elif payload_type == HORUS_PACKET_TYPES.PARAMETER_CHANGE:
+        return "Parameter Change"
     else:
         return "Unknown Payload"
 
