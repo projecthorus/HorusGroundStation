@@ -124,7 +124,7 @@ def decode_horus_payload_telemetry(packet):
     telemetry['batt_voltage_raw'] = unpacked[11]
     telemetry['pyro_voltage_raw'] = unpacked[12]
     telemetry['rxPktCount'] = unpacked[13]
-    telemetry['RSSI'] = unpacked[14]-157
+    telemetry['RSSI'] = unpacked[14]-164
     telemetry['telemFlags'] = unpacked[15]
 
     # Convert some of the fields into more useful units.
@@ -142,7 +142,7 @@ def decode_command_ack(packet):
         return {}
 
     ack_packet = {}
-    ack_packet['rssi'] = packet[2] - 157
+    ack_packet['rssi'] = packet[2] - 164
     ack_packet['snr'] = struct.unpack('b',str(bytearray([packet[3]])))[0]/4.
     if packet[4] == HORUS_PACKET_TYPES.CUTDOWN_COMMAND:
         ack_packet['command'] = "Cutdown"
