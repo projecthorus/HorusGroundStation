@@ -160,9 +160,12 @@ class LoRaTxRxCont(LoRa):
         self.set_mode(MODE.TX)
 
     def udp_broadcast(self,data):
-        s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-        s.setsockopt(socket.SOL_SOCKET,socket.SO_BROADCAST,1)
-        s.sendto(json.dumps(data),('255.255.255.255',self.udp_broadcast_port))
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.setsockopt(socket.SOL_SOCKET,socket.SO_BROADCAST, 1)
+        try:
+            s.sendto(json.dumps(data), ('<broadcast>', self.udp_broadcast_port))
+        except socket.error:
+            s.sendto(json.dumps(data), ('127.0.0.1', self.udp_broadcast_port))
         s.close()
 
     def udp_send_rx(self,payload,snr,rssi,pkt_flags):
