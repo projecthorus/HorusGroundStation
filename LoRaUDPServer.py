@@ -123,7 +123,7 @@ class LoRaTxRxCont(LoRa):
 
         self.max_payload = 64
 
-        self.udp_broadcast_port = 55672
+        self.udp_broadcast_port = HORUS_UDP_PORT
 
         self.txqueue = Queue.Queue(16)
         self.udp_listener_running = False
