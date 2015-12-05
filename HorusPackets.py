@@ -202,7 +202,10 @@ def tx_packet(packet):
     print packet
     s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
     s.setsockopt(socket.SOL_SOCKET,socket.SO_BROADCAST,1)
-    s.sendto(json.dumps(packet),('255.255.255.255',HORUS_UDP_PORT))
+    try:
+        s.sendto(json.dumps(packet), ('<broadcast>', HORUS_UDP_PORT))
+    except socket.error:
+        s.sendto(json.dumps(packet), ('127.0.0.1', HORUS_UDP_PORT))
     s.close()
 
 # Produce short string representation of packet payload contents.
