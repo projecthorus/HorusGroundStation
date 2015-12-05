@@ -282,6 +282,12 @@ def processPacket(packet):
 	lastPacketRSSIValue.setText("%d dBm" % packet['rssi'])
 	lastPacketSNRValue.setText("%.1f dB" % packet['snr'])
 	lastPacketTimeValue.setText(packet['timestamp'])
+
+	crc_ok = packet['pkt_flags']['crc_error'] == 0
+
+	if not crc_ok:
+		lastPacketTypeValue.setText("CRC Fail!")
+		return
 	
 	# Now delve into the payload.
 	payload = packet['payload']
