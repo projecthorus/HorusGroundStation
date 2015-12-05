@@ -112,6 +112,7 @@ elif args.rpishield:
     from SX127x.hardware_piloragateway import HardwareInterface
     hw = HardwareInterface(int(args.device))
 else:
+    print >>sys.stderr, "Please provide a hardware interface argument"
     sys.exit(1)
 
 class LoRaTxRxCont(LoRa):
