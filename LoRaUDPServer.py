@@ -1,15 +1,16 @@
 #!/usr/bin/env python2.7
 #
-#   Project Horus 
+#   Project Horus
 #   LoRa-UDP Gateway Server
 #   Copyright 2015 Mark Jessop <vk5qi@rfhead.net>
-#   
+#
 #   - Connects to and configures a LoRa receiver (SX127x family of ICs)
 #   - Uses UDP broadcast (port 55672) to send/receive as json-encoded dicts:
 #       - Receiver status updates (RSSI, SNR)
-#       - Received packets. 
+#       - Received packets.
 #   - Listens for json-encoded packets to be transmitted on the same port.
-#       - Any received packets go into a queue to be transmitted when the channel is clear.
+#       - Any received packets go into a queue to be transmitted when the
+#       channel is clear.
 #
 #   Dependencies
 #   ============
@@ -20,15 +21,18 @@
 #
 #   TODO
 #   ====
-#   [ ] Allow selection of hardware backend (RPi, SPI-UART Bridge) from command line arg.
-#   [ ] Read LoRa configuration data (frequency, rate, etc) from a configuration file.
-#   
-#   
+#   [ ] Allow selection of hardware backend (RPi, SPI-UART Bridge) from
+#       command line arg.
+#   [ ] Read LoRa configuration data (frequency, rate, etc) from a
+#       configuration file.
+#
+#
 #   JSON PACKET FORMATS
 #   ===================
 #
 #   TRANSMIT PACKET
-#   Packet to be transmitted by the LoRa server. Is added to a queue and transmitted when channel is clear.
+#   Packet to be transmitted by the LoRa server. Is added to a queue and
+#   transmitted when channel is clear.
 #   ---------------
 #   {
 #       'type' : 'TXPKT',
@@ -43,9 +47,10 @@
 #     'timestamp' : '<ISO-8601 formatted timestamp>',
 #     'payload' : [<payload as a list of bytes>]
 #   }
-#   
+#
 #   STATUS PACKET
-#   Broadcast frequently (5Hz or so) to indicate current modem status, for RSSI plotting or similar.
+#   Broadcast frequently (5Hz or so) to indicate current modem status, for
+#   RSSI plotting or similar.
 #   -------------
 #   {
 #       'type' : 'STATUS',
@@ -53,10 +58,11 @@
 #       'rssi' : <Current RSSI in dB>,
 #       'status': {<Current Modem Status, straight from pySX127x's get_modem_status()}
 #   }
-#   
+#
 #   RX DATA PACKET
 #   Broacast whenever a LoRa packet is received
-#   Packets are sent out even if the CRC failed. CRC info is available in the 'pkt_flags' dict.
+#   Packets are sent out even if the CRC failed. CRC info is available in the
+#   'pkt_flags' dict.
 #   --------------
 #   {
 #     'type' : 'RXPKT',
@@ -70,7 +76,7 @@
 #   PING
 #   Ping this server to check it is running.
 #   ---
-#   
+#
 #       'type' : 'PING',
 #       'data' : '<Arbitrary data>'
 #   }
@@ -107,8 +113,6 @@ elif args.rpishield:
     hw = HardwareInterface(int(args.device))
 else:
     sys.exit(1)
-
-
 
 class LoRaTxRxCont(LoRa):
     def __init__(self,hw,verbose=False):
