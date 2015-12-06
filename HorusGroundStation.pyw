@@ -32,7 +32,7 @@ last_packet_timer = 0
 packetSnifferFrame = QtGui.QFrame()
 packetSnifferFrame.setFixedSize(800,150)
 packetSnifferFrame.setFrameStyle(QtGui.QFrame.Box)
-packetSnifferTitle = QtGui.QLabel("<b><u>Packet Sniffer</u></b>")
+packetSnifferTitle = QtGui.QLabel("<b><u>Log</u></b>")
 console = QtGui.QPlainTextEdit()
 console.setReadOnly(True)
 packetSnifferLayout = QtGui.QGridLayout()
@@ -234,7 +234,6 @@ cutdownResponseTypeValue = QtGui.QLabel("")
 cutdownResponseParamLabel = QtGui.QLabel("<b>Parameter</b>")
 cutdownResponseParamValue = QtGui.QLabel("")
 
-
 cutdownResponseLayout = QtGui.QGridLayout()
 cutdownResponseLayout.addWidget(cutdownResponseFrameTitle,0,0,1,2)
 cutdownResponseLayout.addWidget(cutdownResponseTimeLabel,1,0,1,1)
@@ -248,8 +247,47 @@ cutdownResponseLayout.addWidget(cutdownResponseTypeValue,3,2,1,1)
 cutdownResponseLayout.addWidget(cutdownResponseParamLabel,2,3,1,1)
 cutdownResponseLayout.addWidget(cutdownResponseParamValue,3,3,1,1)
 
-
 cutdownResponseFrame.setLayout(cutdownResponseLayout)
+
+uploadFrame = QtGui.QFrame()
+uploadFrame.setFixedSize(400,150)
+uploadFrame.setFrameStyle(QtGui.QFrame.Box)
+uploadFrame.setLineWidth(1)
+uploadFrameTitle = QtGui.QLabel("<b><u>Habitat/APRS Upload</u></b>")
+
+uploadFrameHabitat = QtGui.QCheckBox("Habitat Upload")
+uploadFrameHabitat.setChecked(False)
+uploadFrameHabitatTitle = QtGui.QLabel("Last Upload: ")
+uploadFrameAPRS = QtGui.QCheckBox("APRS Upload")
+uploadFrameAPRS.setChecked(False)
+uploadFrameOziPlotter = QtGui.QCheckBox("OziPlotter Upload")
+uploadFrameOziPlotter.setChecked(True)
+uploadFrameCallsign = QtGui.QLineEdit("N0CALL")
+uploadFrameCallsign.setMaxLength(10)
+
+uploadFrameLayout = QtGui.QGridLayout()
+uploadFrameLayout.addWidget(uploadFrameTitle,0,0,1,1)
+uploadFrameLayout.addWidget(uploadFrameCallsign,0,2,1,2)
+uploadFrameLayout.addWidget(uploadFrameHabitat,1,0,1,1)
+uploadFrameLayout.addWidget(uploadFrameHabitatTitle,1,1,1,2)
+uploadFrameLayout.addWidget(uploadFrameAPRS,3,0,1,1)
+uploadFrameLayout.addWidget(uploadFrameOziPlotter,4,0,1,1)
+
+uploadFrame.setLayout(uploadFrameLayout)
+
+def habitat_upload(telemetry):
+	sentence = telemetry_to_sentence(telemetry)
+	timestamp = datetime.utcnow().isoformat()
+	(success,error) = habitat_upload_payload_telemetry(telemetry,callsign=str(uploadFrameCallsign.text()))
+	if success:
+		uploadFrameHabitatTitle.setText("Last Upload: %s" % datetime.utcnow().strftime("%H:%M:%S"))
+		console.appendPlainText("%s Habitat Upload: %s" % (timestamp, sentence))
+	else:
+		uploadFrameHabitatTitle.setText("Last Upload: Failed!")
+		console.appendPlainText("%s Habitat Upload: FAIL: " % (timestamp, error))
+
+
+
 
 # Create and Lay-out window
 win = QtGui.QWidget()
@@ -266,7 +304,8 @@ layout.addWidget(payloadOtherStatusFrame,0,2,2,1)
 layout.addWidget(cutdownFrame,0,3,1,2)
 layout.addWidget(cutdownResponseFrame,1,3,1,2)
 
-layout.addWidget(packetSnifferFrame,2,0,1,4)
+layout.addWidget(packetSnifferFrame,2,0,1,3)
+layout.addWidget(uploadFrame,2,3,1,1)
 
 
 #
@@ -295,6 +334,7 @@ def processPacket(packet):
 
 	if payload_type == HORUS_PACKET_TYPES.PAYLOAD_TELEMETRY:
 		telemetry = decode_horus_payload_telemetry(payload)
+		print(telemetry_to_sentence(telemetry))
 		lastPacketTypeValue.setText("Telemetry")
 		# Now populate the multitude of labels...
 		payloadStatusPacketCountValue.setText("%d" % telemetry['counter'])
@@ -308,6 +348,9 @@ def processPacket(packet):
 		payloadOtherStatusPyroValue.setText("%.2f V" % telemetry['pyro_voltage'])
 		payloadOtherStatusRxPacketsValue.setText("%d" % telemetry['rxPktCount'])
 		payloadOtherStatusRSSIValue.setText("%d dBm" % telemetry['RSSI'])
+
+		if uploadFrameHabitat.isChecked():
+			habitat_upload(telemetry)
 
 	elif payload_type == HORUS_PACKET_TYPES.TEXT_MESSAGE:
 		lastPacketTypeValue.setText("Text Message")

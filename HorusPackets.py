@@ -316,7 +316,7 @@ def habitat_upload_payload_telemetry(telemetry, callsign="N0CALL"):
             },
     }
     try:
-        c = httplib.HTTPConnection("habitat.habhub.org")
+        c = httplib.HTTPConnection("habitat.habhub.org",timeout=4)
         c.request(
             "PUT",
             "/habitat/_design/payload_telemetry/_update/add_listener/%s" % sha256(sentence_b64).hexdigest(),
