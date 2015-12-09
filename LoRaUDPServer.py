@@ -102,7 +102,13 @@ group = parser.add_mutually_exclusive_group()
 group.add_argument("--rpishield", action="store_true", help="Use a PiLoraGateway RPI Shield.")
 group.add_argument("--spibridge", action="store_true", help="Use a Arduino+LoRa Shield running SPIBridge Firmware.")
 parser.add_argument("-d" ,"--device", default="1", help="Hardware Device, either a serial port (i.e. /dev/ttyUSB0 or COM5) or SPI device number (i.e. 1)")
+parser.add_argument("-f", "--frequency",type=float,default=431.650,help="Operating Frequency (MHz)")
+parser.add_argument("-m", "--mode",type=int,default=0,help="Transmit Mode: 0 = Slow, 1 = Fast")
 args = parser.parse_args()
+
+mode = int(args.mode)
+frequency = float(args.frequency)
+
 
 # Choose hardware interface
 if args.spibridge:
@@ -116,13 +122,14 @@ else:
     sys.exit(1)
 
 class LoRaTxRxCont(LoRa):
-    def __init__(self,hw,verbose=False):
+    def __init__(self,hw,verbose=False,max_payload=64,mode=0,frequency=431.650):
         super(LoRaTxRxCont, self).__init__(hw,verbose)
         self.set_mode(MODE.SLEEP)
         self.set_dio_mapping([0] * 6)
 
-        self.max_payload = 64
-
+        self.rf_mode = mode
+        self.frequency = frequency
+        self.max_payload = max_payload
         self.udp_broadcast_port = HORUS_UDP_PORT
 
         self.txqueue = Queue.Queue(16)
@@ -134,22 +141,33 @@ class LoRaTxRxCont(LoRa):
 
     def set_common(self):
         self.set_mode(MODE.STDBY)
-        self.set_freq(431.650)
-        self.set_bw(BW.BW125)
+        self.set_freq(self.frequency)
         self.set_rx_crc(True)
-        self.set_coding_rate(CODING_RATE.CR4_8)
-        self.set_spreading_factor(10)
+        if self.rf_mode==0:
+            self.set_bw(BW.BW125)
+            self.set_coding_rate(CODING_RATE.CR4_8)
+            self.set_spreading_factor(10)
+            self.set_low_data_rate_optim(True)
+        elif self.rf_mode==1:
+            self.set_bw(BW.BW125)
+            self.set_coding_rate(CODING_RATE.CR4_8)
+            self.set_spreading_factor(8)
+            self.set_low_data_rate_optim(False)
+
         self.set_max_payload_length(self.max_payload)
         self.set_hop_period(0xFF)
         self.set_implicit_header_mode(False)
-        self.set_low_data_rate_optim(True)
 
     def set_rx_mode(self):
         self.set_lna_gain(GAIN.G1)
         self.set_pa_config(pa_select=0,max_power=0,output_power=0)
         self.set_agc_auto_on(True)
-        self.set_detect_optimize(0x03)
-        self.set_detection_threshold(0x0A)
+        if self.rf_mode == 0:
+            self.set_detect_optimize(0x03)
+            self.set_detection_threshold(0x0A)
+        elif self.rf_mode == 1:
+            self.set_detect_optimize(0x03)
+            self.set_detection_threshold(0x0A)
         self.set_dio_mapping([0] * 6)
         self.set_mode(MODE.RXCONT)
 
@@ -356,10 +374,10 @@ class LoRaTxRxCont(LoRa):
                 self.attemptTX()
 
 
-lora = LoRaTxRxCont(hw,verbose=False)
+lora = LoRaTxRxCont(hw,verbose=False,mode=mode,frequency=frequency)
 #lora.set_pa_config(max_power=0, output_power=0)
 
-print(lora)
+#print(lora)
 #assert(lora.get_agc_auto_on() == 1)
 
 
