@@ -186,14 +186,16 @@ class LoRaTxRxCont(LoRa):
             s.sendto(json.dumps(data), ('127.0.0.1', self.udp_broadcast_port))
         s.close()
 
-    def udp_send_rx(self,payload,snr,rssi,pkt_flags):
+    def udp_send_rx(self,payload,snr,rssi,pkt_flags,freq_error):
         pkt_dict = {
             "type"      :   "RXPKT",
             "timestamp" : datetime.utcnow().isoformat(),
             "payload"   :  payload,
             "snr"       :   snr,
             "rssi"      :   rssi,
-            "pkt_flags" :    pkt_flags
+            "pkt_flags" :    pkt_flags,
+            "freq_error": freq_error
+
         }
         self.udp_broadcast(pkt_dict)
 
@@ -203,11 +205,13 @@ class LoRaTxRxCont(LoRa):
         pkt_flags = self.get_irq_flags()
         snr = self.get_pkt_snr_value()
         rssi = self.get_pkt_rssi_value()
+        fei = self.get_fei()
+        freq_error = -1*int((fei * 2**24.0 / 32e6)*(125e6/500e6))
 #        print("Packet SNR: %.1f dB, RSSI: %d dB" % (snr, rssi))
         rxdata = self.read_payload(nocheck=True)
         print("RX Packet!")
 
-        self.udp_send_rx(rxdata,snr,rssi,pkt_flags)
+        self.udp_send_rx(rxdata,snr,rssi,pkt_flags,freq_error)
 
 #        if pkt_flags["crc_error"] == 0:
 #            print(map(hex, rxdata))
@@ -285,6 +289,7 @@ class LoRaTxRxCont(LoRa):
             status = self.get_modem_status()
             if status['signal_detected'] == 1:
                 # Signal detected? Immediately return. Try again later.
+                print("Channel busy")
                 return
             else:
                 sleep(random.random()*0.2) # Wait a random length of time.

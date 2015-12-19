@@ -269,12 +269,13 @@ def udp_packet_to_string(udp_packet):
         timestamp = udp_packet['timestamp']
         rssi = float(udp_packet['rssi'])
         snr = float(udp_packet['snr'])
+        freq_error = float(udp_packet['freq_error'])
         crc_ok = udp_packet['pkt_flags']['crc_error'] == 0
         if crc_ok:
             payload_str = payload_to_string(udp_packet['payload'])
         else:
             payload_str = "CRC Fail!"
-        return "%s RXPKT \tRSSI: %.1f SNR: %.1f \tPayload:[%s]" % (timestamp,rssi,snr,payload_str)
+        return "%s RXPKT \tRSSI: %.1f SNR: %.1f FERR: %.1f \tPayload:[%s]" % (timestamp,rssi,snr,freq_error,payload_str)
     elif pkt_type == "STATUS":
         timestamp = udp_packet['timestamp']
         rssi = float(udp_packet['rssi'])
