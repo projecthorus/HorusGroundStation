@@ -10,6 +10,7 @@ from threading import Thread
 from PyQt4 import QtGui, QtCore
 from datetime import datetime
 import socket,json,sys,Queue
+import ConfigParser
 
 udp_broadcast_port = HORUS_UDP_PORT
 udp_listener_running = False
@@ -44,6 +45,16 @@ layout.addWidget(console,1,0,1,4)
 layout.addWidget(callsignBox,2,0,1,1)
 layout.addWidget(messageBox,2,1,1,3)
 
+# Now attempt to read in a config file to preset various parameters.
+try:
+	config = ConfigParser.ConfigParser()
+	config.read('defaults.cfg')
+	callsign = config.get('User','callsign')
+	callsignBox.setText(callsign)
+except:
+	print("Problems reading configuration file, skipping...")
+
+
 # Send a message!
 def send_message():
 	callsign = str(callsignBox.text())
@@ -63,7 +74,7 @@ def process_udp(udp_packet):
 
 		# Start every line with a timestamp
 		line = datetime.utcnow().strftime("%H:%M ")
-
+		print packet_dict['type']
 		# TX Confirmation Packet?
 		if packet_dict['type'] == 'TXDONE':
 			if(packet_dict['payload'][0] == HORUS_PACKET_TYPES.TEXT_MESSAGE):
