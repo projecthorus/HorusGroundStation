@@ -10,6 +10,7 @@ from threading import Thread
 from PyQt4 import QtGui, QtCore
 from datetime import datetime
 import socket,json,sys,Queue,random
+import ConfigParser
 
 udp_broadcast_port = HORUS_UDP_PORT
 udp_listener_running = False
@@ -287,6 +288,16 @@ def habitat_upload(telemetry):
 		console.appendPlainText("%s Habitat Upload: FAIL: " % (timestamp, error))
 
 
+# Now attempt to read in a config file to preset various parameters.
+try:
+	config = ConfigParser.ConfigParser()
+	config.read('defaults.cfg')
+	callsign = config.get('User','callsign')
+	uploadFrameCallsign.setText(callsign)
+	password = config.get('User','password')
+	cutdownParameterPassword.setText(password)
+except:
+	print("Problems reading configuration file, skipping...")
 
 
 # Create and Lay-out window
