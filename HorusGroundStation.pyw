@@ -287,7 +287,6 @@ def habitat_upload(telemetry):
 		uploadFrameHabitatTitle.setText("Last Upload: Failed!")
 		console.appendPlainText("%s Habitat Upload: FAIL: " % (timestamp, error))
 
-
 # Now attempt to read in a config file to preset various parameters.
 try:
 	config = ConfigParser.ConfigParser()
@@ -362,6 +361,9 @@ def processPacket(packet):
 
 		if uploadFrameHabitat.isChecked():
 			habitat_upload(telemetry)
+
+		if uploadFrameOziPlotter.isChecked():
+			oziplotter_upload_telemetry(telemetry)
 
 	elif payload_type == HORUS_PACKET_TYPES.TEXT_MESSAGE:
 		lastPacketTypeValue.setText("Text Message")

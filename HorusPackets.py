@@ -11,6 +11,7 @@ from hashlib import sha256
 from datetime import datetime
 
 HORUS_UDP_PORT = 55672
+HORUS_OZIPLOTTER_PORT = 8942
 
 # Packet Payload Types
 class HORUS_PACKET_TYPES:
@@ -269,6 +270,7 @@ def udp_packet_to_string(udp_packet):
         timestamp = udp_packet['timestamp']
         rssi = float(udp_packet['rssi'])
         snr = float(udp_packet['snr'])
+
         freq_error = float(udp_packet['freq_error'])
         crc_ok = udp_packet['pkt_flags']['crc_error'] == 0
         if crc_ok:
@@ -329,3 +331,15 @@ def habitat_upload_payload_telemetry(telemetry, callsign="N0CALL"):
         return (True,"OK")
     except Exception as e:
         return (False,"Failed to upload to Habitat: %s" % (str(e)))
+
+# OziPlotter Upload Functions
+def oziplotter_upload_telemetry(telemetry,hostname="127.0.0.1"):
+    sentence = telemetry_to_sentence(telemetry)
+
+    try:
+        ozisock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+        ozisock.sendto(sentence,(hostname,HORUS_OZIPLOTTER_PORT))
+        ozisock.close()
+    except Exception as e:
+        print("Failed to send to Ozi: " % e)
+
