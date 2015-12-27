@@ -9,11 +9,13 @@ from HorusPackets import *
 from threading import Thread
 from PyQt4 import QtGui, QtCore
 from datetime import datetime
-import socket,json,sys,Queue,random
+import socket,json,sys,Queue,random,os
 import ConfigParser
 
 udp_broadcast_port = HORUS_UDP_PORT
 udp_listener_running = False
+
+foxtrot_log = "foxtrot.log"
 
 # RX Message queue to avoid threading issues.
 rxqueue = Queue.Queue(16)
@@ -263,6 +265,8 @@ uploadFrameAPRS = QtGui.QCheckBox("APRS Upload")
 uploadFrameAPRS.setChecked(False)
 uploadFrameOziPlotter = QtGui.QCheckBox("OziPlotter Upload")
 uploadFrameOziPlotter.setChecked(True)
+uploadFrameFoxTrot = QtGui.QCheckBox("FoxTrotGPS Update")
+uploadFrameFoxTrot.setChecked(True)
 uploadFrameCallsign = QtGui.QLineEdit("N0CALL")
 uploadFrameCallsign.setMaxLength(10)
 
@@ -273,6 +277,7 @@ uploadFrameLayout.addWidget(uploadFrameHabitat,1,0,1,1)
 uploadFrameLayout.addWidget(uploadFrameHabitatTitle,1,1,1,2)
 uploadFrameLayout.addWidget(uploadFrameAPRS,3,0,1,1)
 uploadFrameLayout.addWidget(uploadFrameOziPlotter,4,0,1,1)
+uploadFrameLayout.addWidget(uploadFrameFoxTrot,5,0,1,1)
 
 uploadFrame.setLayout(uploadFrameLayout)
 
@@ -287,6 +292,21 @@ def habitat_upload(telemetry):
 		uploadFrameHabitatTitle.setText("Last Upload: Failed!")
 		console.appendPlainText("%s Habitat Upload: FAIL: " % (timestamp, error))
 
+def foxtrot_update(telemetry):
+	# Produce and append a line to the log file.
+	append_line = "%.5f, %.5f\n" % (telemetry['latitude'],telemetry['longitude'])
+	f_log = open(foxtrot_log, 'a')
+	f_log.write(append_line)
+	f_log.close()
+	# Now notify FoxTrotGPS to update
+	f_log_filename = os.path.abspath(foxtrot_log)
+	try:
+		foxsock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+		foxsock.sendto(f_log_filename,("127.0.0.1",21234))
+		foxsock.close()
+	except Exception as e:
+		print("Failed to request FoxTrotGPS Update: " % e)
+
 # Now attempt to read in a config file to preset various parameters.
 try:
 	config = ConfigParser.ConfigParser()
@@ -297,6 +317,11 @@ try:
 	cutdownParameterPassword.setText(password)
 except:
 	print("Problems reading configuration file, skipping...")
+
+# Delete FoxTrotGPS log file if it exists.
+if os.path.exists(foxtrot_log):
+	print("Found Existing GPS Log. Removing.")
+	os.remove(foxtrot_log)
 
 
 # Create and Lay-out window
@@ -364,6 +389,9 @@ def processPacket(packet):
 
 		if uploadFrameOziPlotter.isChecked():
 			oziplotter_upload_telemetry(telemetry)
+
+		if uploadFrameFoxTrot.isChecked():
+			foxtrot_update(telemetry)
 
 	elif payload_type == HORUS_PACKET_TYPES.TEXT_MESSAGE:
 		lastPacketTypeValue.setText("Text Message")
