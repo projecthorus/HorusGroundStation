@@ -2,7 +2,14 @@
 Ground-station utilities for the LoRa systems used by Project Horus.
 
 ## Dependencies
-* Python 2.7 (Will eventually work with Python 3, but not yet)
+* Python 2.7
+  * This should be stock on most modern linux distros.
+  * On Windows I recommend the 'Anaconda Python' Distribution.
+* PyQt4. 
+  * Install with: sudo apt-get install python-qt4
+* pySX127x
+  * git clone https://github.com/darksidelemm/pySX127x
+  * Copy the SX127x directory into this directory. 
 * Additional Python Packages (install with pip)
   * crcmod
   * pyserial (if using the SPIBridge interface)
@@ -23,6 +30,7 @@ The server can be started using:
 ## Usage - Client Applications
 There are a few example client applications in this repository
 * HorusGroundStation.pyw - Horus Cutdown Payload ground-station GUI application, which shows telemetry information and allows commanding of the cutdown payload.
+  * This can read some user settings (Callsign, Cutdown Password) from defaults.cfg
 * HorusMessenger.py - Basic text-messenger GUI application.
 * PacketSniffer.py - Console application which prints a textual representation of all LoRaUDPServer UDP broadcast packets seen on the local network.
 * TelemetryUpload.py - Listens for payload telemetry, and uploads to Habitat.
