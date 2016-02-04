@@ -117,7 +117,7 @@ def udp_rx_thread():
 	udp_listener_running = True
 	while udp_listener_running:
 		try:
-			m = s.recvfrom(1024)
+			m = s.recvfrom(MAX_JSON_LEN)
 		except socket.timeout:
 			m = None
 		

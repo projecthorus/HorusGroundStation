@@ -5,13 +5,15 @@
 #   Copyright 2015 Mark Jessop <vk5qi@rfhead.net>
 #
 
-import time, struct, json, socket, httplib, crcmod
+import time, struct, json, socket, httplib, crcmod, urllib, urllib2
 from base64 import b64encode
 from hashlib import sha256
 from datetime import datetime
 
 HORUS_UDP_PORT = 55672
 HORUS_OZIPLOTTER_PORT = 8942
+MAX_JSON_LEN = 2048
+TX_QUEUE_SIZE = 32
 
 # Packet Payload Types
 class HORUS_PACKET_TYPES:
@@ -20,6 +22,9 @@ class HORUS_PACKET_TYPES:
     CUTDOWN_COMMAND       = 2
     PARAMETER_CHANGE      = 3
     COMMAND_ACK           = 4
+    # Accept SSDV packets 'as-is'. https://ukhas.org.uk/guides:ssdv
+    SSDV_FEC              = 0x66
+    SSDV_NOFEC            = 0x67
 
 class HORUS_PAYLOAD_PARAMS:
     PING                  = 0
@@ -77,6 +82,39 @@ def read_text_message_packet(packet):
     message = packet[10:].rstrip('\n\0')
     return (source,message)
 
+# SSDV Packets
+# Generally we will just send this straight out to ssdv.habhub.org
+def read_ssdv_packet_info(packet):
+    packet = list(bytearray(packet))
+    # Check packet is actually a SSDV packet.
+    if len(packet) != 255:
+        return "SSDV: Invalid Length"
+
+
+    # We got this far, may as well try and extract the packet info.
+    callsign = "???"
+    packet_type = "FEC" if (packet[0]==0x66) else "No-FEC"
+    image_id = packet[5]
+    packet_id = (packet[6]<<8) + packet[7]
+    width = packet[8]*16
+    height = packet[9]*16
+
+    return "SSDV: %s, Img:%d, Pkt:%d, %dx%d" % (packet_type,image_id,packet_id,width,height)
+
+def upload_ssdv_packet(packet, callsign="N0CALL"):
+    packet = "\x55" + str(bytearray(packet))
+    hexpacket = "".join(x.encode('hex') for x in packet)
+    url = "http://www.sanslogic.co.uk/ssdv/data.php"
+    values = {'callsign':callsign,
+        'encoding':'hex',
+        'packet':data}
+    valuedata = urllib.urlencode(values)
+    req = urllib2.Request(url,valuedata)
+    try:
+        response = urllib2.urlopen(req)
+        return (True,"OK")
+    except Exception as e:
+        return (False,"Failed to upload SSDV to Habitat: %s" % (str(e)))
 
 # PAYLOAD TELEMETRY PACKET
 # This one is in a bit of flux at the moment.
@@ -217,19 +255,58 @@ def create_param_change_packet(param = HORUS_PAYLOAD_PARAMS.PING, value = 10, pa
     return param_packet
 
 # Transmit packet via UDP Broadcast
-def tx_packet(packet):
+def tx_packet(payload,blocking=False,timeout=4):
     packet = {
         'type' : 'TXPKT',
-        'payload' : list(bytearray(packet))
+        'payload' : list(bytearray(payload))
     }
+    # Print some info about the packet.
     print packet
+    print len(json.dumps(packet))
+    # Set up our UDP socket
     s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+    s.settimeout(1)
+    # Set up socket for broadcast, and allow re-use of the address
     s.setsockopt(socket.SOL_SOCKET,socket.SO_BROADCAST,1)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    s.bind(('',HORUS_UDP_PORT))
     try:
         s.sendto(json.dumps(packet), ('<broadcast>', HORUS_UDP_PORT))
     except socket.error:
         s.sendto(json.dumps(packet), ('127.0.0.1', HORUS_UDP_PORT))
-    s.close()
+
+    if blocking:
+        start_time = time.time() # Start time for our timeout.
+
+        while (time.time()-start_time) < timeout:
+            try:
+                print("Waiting for UDP")
+                (m,a) = s.recvfrom(MAX_JSON_LEN)
+            except socket.timeout:
+                m = None
+            
+            if m != None:
+                try:
+                    packet = json.loads(m)
+                    if packet['type'] == 'TXDONE':
+                        if packet['payload'] == list(bytearray(payload)):
+                            print("Packet Transmitted Successfuly!")
+                            s.close()
+                            return
+                        else:
+                            print("Not our payload!")
+                    else:
+                        print("Wrong Packet: %s" % packet['type'])
+                except Exception as e:
+                    print("Error: %s" % e)
+            else:
+                print("Got no packet")
+        print("TX Timeout!")
+
+    else:
+        s.close()
+
+
 
 # Produce short string representation of packet payload contents.
 def payload_to_string(packet):
@@ -257,6 +334,9 @@ def payload_to_string(packet):
         return data
     elif payload_type == HORUS_PACKET_TYPES.PARAMETER_CHANGE:
         return "Parameter Change"
+    elif (payload_type == HORUS_PACKET_TYPES.SSDV_FEC) or (payload_type == HORUS_PACKET_TYPES.SSDV_NOFEC):
+        return read_ssdv_packet_info(packet)
+
     else:
         return "Unknown Payload"
 
@@ -281,8 +361,9 @@ def udp_packet_to_string(udp_packet):
     elif pkt_type == "STATUS":
         timestamp = udp_packet['timestamp']
         rssi = float(udp_packet['rssi'])
+        txqueuesize = udp_packet['txqueuesize']
         # Insert Modem Status decoding code here.
-        return "%s STATUS \tRSSI: %.1f" % (timestamp,rssi)
+        return "%s STATUS \tRSSI: %.1f \tQUEUE: %d" % (timestamp,rssi,txqueuesize)
     elif pkt_type == "TXPKT":
         timestamp = datetime.utcnow().isoformat()
         payload_str = payload_to_string(udp_packet['payload'])

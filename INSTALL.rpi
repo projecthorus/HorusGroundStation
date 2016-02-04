@@ -1,0 +1,114 @@
+Raspberry Pi LoRa Gateway Configuration Instructions
+Mark Jessop <vk5qi@rfhead.net> 2016-01-22
+====================================================
+These are a basic set of instructions for setting up a Raspberry Pi A/B+ as a
+LoRa Ground Station, using the HorusGroundStation software.
+
+Requirements
+------------
+* A Raspberry Pi A/B+. Either will work.
+* Either a WiFi dongle that works with the Pi, or an ethernet connection.
+* A LoRa shield, or a SPIBridge LoRa unit.
+
+Instructions
+------------
+
+1. 	Download the latest Raspbian image and copy it onto a SD card: i.e.
+> sudo dd if=2015-11-21-raspbian-jessie.img of=/dev/mmcblk0 bs=4M
+
+2. 	Mount the SD card on your machine (assuming Linux here) and edit the following files:
+
+2.1. If using WiFi: /etc/wpa_supplicant/wpa_supplicant.conf
+Add the following:
+
+	network={
+		ssid="YourWIFISSID"
+		psk="YourWiFiPassword"
+		id_str="MyWifi"
+	}
+
+You can add multiple network blocks if you wish.
+
+2.2. /etc/network/interfaces
+At the end of the file add:
+
+	iface default inet dhcp
+
+2.3 /etc/hostname
+Modify this to something like:
+	loragatewayX
+Assuming avahi works on your network & OS, this will let you ssh into the RPi at loragatewayX.local
+
+2.4 /etc/hosts
+Add a line in here with the above hostname, so it resolves to localhost.
+
+3. 	Unmount the SD card, insert into Pi, and boot up.
+	If all went well, the Pi should appear on your network, and you should be able to SSH in using:
+	> ssh pi@loragatewayX.local
+	(Default password: raspberry)
+
+4. Change the pi user's password!
+	> passwd
+
+5. OPTIONAL: Create a user for yourself.
+	> sudo adduser myusername
+	> sudo usermod -aG sudo myusername
+
+6. Run raspi-config
+	> sudo raspi-config
+	Do the following:
+	1. Expand Filesystem
+	2. Under "Advanced Options", enable SPI
+	3. On exit, let the pi reboot.
+
+7. Update the Pi.
+	> sudo apt-get update
+	> sudo apt-get upgrade
+	(wait a while...)
+
+8. Install the packages we need.
+	> sudo apt-get install python-dev python-serial
+	> sudo pip install crcmod
+
+9. Clone the required repositories.
+	> git clone https://github.com/darksidelemm/pySX127x
+	> git clone https://github.com/projecthorus/HorusGroundStation.git
+
+10. Copy what we need out of pySX127x
+	> cp -r pySX127x/SX127x/ HorusGroundStation/
+
+11. Check LoRaUDPServer.py runs...
+	> cd HorusGroundStation
+	If you are using a raspberry pi shield:
+	> sudo python LoRaUDPServer.py --rpishield -d device -f frequency
+	of if you are using an Arduino SPIBridge 
+	> sudo python LoRaUDPServer.py --spibridge -d device -f frequency
+	Where:
+	devicenum = 0 or 1 if you are using a RPI shield, or a tty (i.e. /dev/ttyUSB0) if you are
+				using a SPIBridge unit.
+	frequency = operating frequency in MHz (i.e. 434.650)
+
+	You should now be able to run the HorusGroundStation.pyw python script on another machine on the network 
+	and see STATUS packets flowing.
+
+12. Make LoRaUDPServer.py autostart...
+	> sudo vim/nano/whatever /etc/rc.local
+
+	Modify the section after "# Print the IP Address" to read:
+
+	# Print the IP address
+	sleep 30
+	_IP=$(hostname -I) || true
+	if [ "$_IP" ]; then
+	  printf "My IP address is %s\n" "$_IP"
+	  sudo python /home/YOURUSERNAME/HorusGroundStation/LoRaUDPServer.py --rpishield -d device -f frequency &
+	fi
+
+	exit 0
+
+13. Reboot and check it works!
+	> sudo shutdown -r now
+
+14. OPTIONAL: Set up Tor hidden service access:
+	Follow instructions here: https://www.khalidalnajjar.com/access-your-raspberry-pi-globally-using-tor/
+

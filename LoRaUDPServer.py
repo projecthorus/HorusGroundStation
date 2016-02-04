@@ -21,7 +21,7 @@
 #
 #   TODO
 #   ====
-#   [ ] Allow selection of hardware backend (RPi, SPI-UART Bridge) from
+#   [x] Allow selection of hardware backend (RPi, SPI-UART Bridge) from
 #       command line arg.
 #   [ ] Read LoRa configuration data (frequency, rate, etc) from a
 #       configuration file.
@@ -103,7 +103,7 @@ group.add_argument("--rpishield", action="store_true", help="Use a PiLoraGateway
 group.add_argument("--spibridge", action="store_true", help="Use a Arduino+LoRa Shield running SPIBridge Firmware.")
 parser.add_argument("-d" ,"--device", default="1", help="Hardware Device, either a serial port (i.e. /dev/ttyUSB0 or COM5) or SPI device number (i.e. 1)")
 parser.add_argument("-f", "--frequency",type=float,default=431.650,help="Operating Frequency (MHz)")
-parser.add_argument("-m", "--mode",type=int,default=0,help="Transmit Mode: 0 = Slow, 1 = Fast")
+parser.add_argument("-m", "--mode",type=int,default=0,help="Transmit Mode: 0 = Slow, 1 = Fast, 2 = Really Fast")
 args = parser.parse_args()
 
 mode = int(args.mode)
@@ -122,7 +122,7 @@ else:
     sys.exit(1)
 
 class LoRaTxRxCont(LoRa):
-    def __init__(self,hw,verbose=False,max_payload=64,mode=0,frequency=431.650):
+    def __init__(self,hw,verbose=False,max_payload=255,mode=0,frequency=431.650):
         super(LoRaTxRxCont, self).__init__(hw,verbose)
         self.set_mode(MODE.SLEEP)
         self.set_dio_mapping([0] * 6)
@@ -132,7 +132,7 @@ class LoRaTxRxCont(LoRa):
         self.max_payload = max_payload
         self.udp_broadcast_port = HORUS_UDP_PORT
 
-        self.txqueue = Queue.Queue(16)
+        self.txqueue = Queue.Queue(TX_QUEUE_SIZE)
         self.udp_listener_running = False
 
         self.status_counter = 0
@@ -148,11 +148,21 @@ class LoRaTxRxCont(LoRa):
             self.set_coding_rate(CODING_RATE.CR4_8)
             self.set_spreading_factor(10)
             self.set_low_data_rate_optim(True)
+            self.tx_delay_fudge = 0.5
         elif self.rf_mode==1:
             self.set_bw(BW.BW125)
             self.set_coding_rate(CODING_RATE.CR4_8)
             self.set_spreading_factor(8)
             self.set_low_data_rate_optim(False)
+            self.tx_delay_fudge = 1.2
+        elif self.rf_mode==2:
+            self.set_bw(BW.BW250)
+            self.set_coding_rate(CODING_RATE.CR4_8)
+            self.set_spreading_factor(7)
+            self.set_low_data_rate_optim(False)
+            self.tx_delay_fudge = 0.4
+
+
 
         self.set_max_payload_length(self.max_payload)
         self.set_hop_period(0xFF)
@@ -206,7 +216,7 @@ class LoRaTxRxCont(LoRa):
         snr = self.get_pkt_snr_value()
         rssi = self.get_pkt_rssi_value()
         fei = self.get_fei()
-        freq_error = -1*int((fei * 2**24.0 / 32e6)*(125e6/500e6))
+        freq_error = -1*int(((fei&0x0FFFFF) * 2**24.0 / 32e6)*(125e6/500e6))
 #        print("Packet SNR: %.1f dB, RSSI: %d dB" % (snr, rssi))
         rxdata = self.read_payload(nocheck=True)
         print("RX Packet!")
@@ -249,21 +259,24 @@ class LoRaTxRxCont(LoRa):
         self.set_lna_gain(GAIN.G6)
         self.set_pa_config(pa_select=1,max_power=0,output_power=0x0F) # 50mW
         self.set_dio_mapping([1,0,0,0,0,0])
+        self.set_fifo_tx_base_addr(0x00)
         self.set_payload_length(len(data))
         self.write_payload(list(bytearray(data)))
         print(self.get_payload_length())
         # Transmit!
         tx_timestamp = datetime.utcnow().isoformat()
         print(datetime.utcnow().isoformat())
+        self.clear_irq_flags()
         self.set_mode(MODE.TX)
         # Busy-wait until tx_done is raised.
         print "Waiting for transmit to finish..."
         # For some reason, if we start reading the IRQ flags immediately, the TX can
         # abort prematurely. Dunno why yet.
-        sleep(0.5)
+        sleep(self.tx_delay_fudge)
         # Can probably fix this by, y'know, using interrupt lines properly.
         #while(self.get_irq_flags()["tx_done"]==False):
         while(self.BOARD.read_gpio()[0] == 0):
+        #    print("Waiting..")
             pass
         #self.set_mode(MODE.STDBY)
         self.clear_irq_flags()
@@ -283,9 +296,9 @@ class LoRaTxRxCont(LoRa):
         print("Done.")
 
     # Perform some checks to see if the channel is free, then TX immediately.
-    def attemptTX(self):
+    def attemptTX(self, check_times = 0):
         # Check modem status a few times to be sure we aren't about to stomp on anyone.
-        for x in range(5):
+        for x in range(check_times):
             status = self.get_modem_status()
             if status['signal_detected'] == 1:
                 # Signal detected? Immediately return. Try again later.
@@ -302,6 +315,7 @@ class LoRaTxRxCont(LoRa):
         # Transmit!
         self.tx_packet(data)
 
+
     # Continuously listen on a UDP port for json data.
     # If a valid packet is received, put it in the transmit queue.
     # This function should be run in a separate thread.
@@ -314,7 +328,7 @@ class LoRaTxRxCont(LoRa):
         self.udp_listener_running = True
         while self.udp_listener_running:
             try:
-                m = s.recvfrom(1024)
+                m = s.recvfrom(MAX_JSON_LEN)
             except:
                 m = None
 
@@ -363,7 +377,8 @@ class LoRaTxRxCont(LoRa):
                     'type'  : "STATUS",
                     "timestamp" : datetime.utcnow().isoformat(),
                     'rssi'  : rssi_value,
-                    'status': status
+                    'status': status,
+                    'txqueuesize': self.txqueue.qsize()
                 }
                 self.udp_broadcast(status_dict)
 

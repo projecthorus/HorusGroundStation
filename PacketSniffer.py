@@ -11,7 +11,7 @@ import socket,json,sys,Queue
 
 udp_listener_running = False
 
-def process_udp(udp_packet):
+def process_udp(udp_packet, address="0.0.0.0"):
 	try:
 		packet_dict = json.loads(udp_packet)
 		
@@ -29,12 +29,13 @@ def udp_rx_thread():
 	udp_listener_running = True
 	while udp_listener_running:
 		try:
-			m = s.recvfrom(1024)
+			(m,addr) = s.recvfrom(MAX_JSON_LEN)
+			print(addr)
 		except socket.timeout:
 			m = None
 		
 		if m != None:
-				process_udp(m[0])
+				process_udp(m)
 	
 	print("Closing UDP Listener")
 	s.close()
