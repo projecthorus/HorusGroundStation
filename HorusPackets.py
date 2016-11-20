@@ -22,6 +22,7 @@ class HORUS_PACKET_TYPES:
     CUTDOWN_COMMAND       = 2
     PARAMETER_CHANGE      = 3
     COMMAND_ACK           = 4
+    SHORT_TELEMETRY       = 5
     # Accept SSDV packets 'as-is'. https://ukhas.org.uk/guides:ssdv
     SSDV_FEC              = 0x66
     SSDV_NOFEC            = 0x67
@@ -40,6 +41,15 @@ def decode_payload_type(packet):
     payload_type = packet[0]
 
     return payload_type
+
+def decode_payload_id(packet):
+    # This expects the payload as an integer list. Convert it to one if it isn't already
+    packet = list(bytearray(packet))
+
+    # 3rd byte is the payload ID.
+    payload_id = packet[2]
+
+    return payload_id
 
 def decode_payload_flags(packet):
     # This expects the payload as an integer list. Convert it to one if it isn't already
@@ -116,6 +126,53 @@ def upload_ssdv_packet(packet, callsign="N0CALL"):
     except Exception as e:
         return (False,"Failed to upload SSDV to Habitat: %s" % (str(e)))
 
+# SHORT TELEMETRY PACKET
+# As used by SwarmTrackerLoRa
+# Again, payload format is in a bit of flux.
+# Payload Format:
+# struct TBinaryPacket
+# {
+#   uint8_t   PacketType;
+#     uint8_t     PayloadID;
+#     uint8_t   hour;
+#   uint8_t   minute;
+#   uint8_t   second;
+#     float       Latitude;
+#     float       Longitude;
+#   uint8_t   Speed; // Speed in Knots (1-255 knots)
+#   uint8_t   BattVoltage; // 0 = 0.5v, 255 = 2.0V, linear steps in-between.
+#   uint8_t   Sats;
+# };  //  __attribute__ ((packed));
+
+def decode_short_payload_telemetry(packet):
+    packet = str(bytearray(packet))
+
+    horus_format_struct = "<BBBBBffBBB"
+    try:
+        unpacked = struct.unpack(horus_format_struct, packet)
+    except:
+        print "Wrong string length. Packet contents:"
+        print ":".join("{:02x}".format(ord(c)) for c in data)
+        return {}
+
+    telemetry = {}
+    telemetry['packet_type'] = unpacked[0]
+    telemetry['payload_id'] = unpacked[1]
+    telemetry['hour'] = unpacked[2]
+    telemetry['minute'] = unpacked[3]
+    telemetry['second'] = unpacked[4]
+    telemetry['latitude'] = unpacked[5]
+    telemetry['longitude'] = unpacked[6]
+    telemetry['speed'] = unpacked[7]
+    telemetry['sats'] = unpacked[9]
+    telemetry['batt_voltage_raw'] = unpacked[8]
+
+    # Convert some of the fields into more useful units.
+    telemetry['time'] = "%02d:%02d:%02d" % (telemetry['hour'],telemetry['minute'],telemetry['second'])
+    telemetry['batt_voltage'] = 0.5 + 1.5*telemetry['batt_voltage_raw']/255.0
+
+    return telemetry
+
 # PAYLOAD TELEMETRY PACKET
 # This one is in a bit of flux at the moment.
 # Payload Format:
@@ -138,6 +195,7 @@ def upload_ssdv_packet(packet, callsign="N0CALL"):
 #   uint8_t   rxRSSI; // Ambient RSSI value, measured just before transmission.
 #   uint8_t   telemFlags; // Various payload flags, TBD
 # };  //  __attribute__ ((packed));
+
 
 def decode_horus_payload_telemetry(packet):
     packet = str(bytearray(packet))
@@ -255,11 +313,15 @@ def create_param_change_packet(param = HORUS_PAYLOAD_PARAMS.PING, value = 10, pa
     return param_packet
 
 # Transmit packet via UDP Broadcast
-def tx_packet(payload,blocking=False,timeout=4):
+def tx_packet(payload, blocking=False, timeout=4, destination=None):
     packet = {
         'type' : 'TXPKT',
-        'payload' : list(bytearray(payload))
+        'payload' : list(bytearray(payload)),
     }
+    # Add in destination field if we have been given one.
+    if destination != None:
+        packet['destination'] = destination
+
     # Print some info about the packet.
     print packet
     print len(json.dumps(packet))
@@ -269,6 +331,10 @@ def tx_packet(payload,blocking=False,timeout=4):
     # Set up socket for broadcast, and allow re-use of the address
     s.setsockopt(socket.SOL_SOCKET,socket.SO_BROADCAST,1)
     s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+    except:
+        pass
     s.bind(('',HORUS_UDP_PORT))
     try:
         s.sendto(json.dumps(packet), ('<broadcast>', HORUS_UDP_PORT))
@@ -276,9 +342,9 @@ def tx_packet(payload,blocking=False,timeout=4):
         s.sendto(json.dumps(packet), ('127.0.0.1', HORUS_UDP_PORT))
 
     if blocking:
-        start_time = time.time() # Start time for our timeout.
+        start_time = time() # Start time for our timeout.
 
-        while (time.time()-start_time) < timeout:
+        while (time()-start_time) < timeout:
             try:
                 print("Waiting for UDP")
                 (m,a) = s.recvfrom(MAX_JSON_LEN)
@@ -316,6 +382,11 @@ def payload_to_string(packet):
         telemetry = decode_horus_payload_telemetry(packet)
         data = "Balloon Telemetry: %s,%d,%.5f,%.5f,%d,%d,%.2f,%.2f,%d,%d" % (telemetry['time'],telemetry['counter'],
             telemetry['latitude'],telemetry['longitude'],telemetry['altitude'],telemetry['sats'],telemetry['batt_voltage'],telemetry['pyro_voltage'],telemetry['rxPktCount'],telemetry['RSSI'])
+        return data
+    elif payload_type == HORUS_PACKET_TYPES.SHORT_TELEMETRY:
+        telemetry = decode_short_payload_telemetry(packet)
+        data = "Short Telemetry: ID:%d %s,%.6f,%.6f,%d,%d" % (telemetry['payload_id'],telemetry['time'],
+            telemetry['latitude'],telemetry['longitude'],telemetry['sats'],telemetry['batt_voltage'])
         return data
     elif payload_type == HORUS_PACKET_TYPES.TEXT_MESSAGE:
         (source, message) = read_text_message_packet(packet)
@@ -370,12 +441,18 @@ def udp_packet_to_string(udp_packet):
         return "%s TXPKT \tPayload:[%s]" % (timestamp,payload_str)
     elif pkt_type == "TXDONE":
         timestamp = udp_packet['timestamp']
+        txqueuesize = udp_packet['txqueuesize']
         payload_str = payload_to_string(udp_packet['payload'])
-        return "%s TXDONE \tPayload:[%s]" % (timestamp,payload_str)
+        return "%s TXDONE \tPayload:[%s] \tQUEUE: %d" % (timestamp,payload_str,txqueuesize)
     elif pkt_type == "TXQUEUED":
         timestamp = udp_packet['timestamp']
+        txqueuesize = udp_packet['txqueuesize']
         payload_str = payload_to_string(udp_packet['payload'])
-        return "%s TXQUEUED \tPayload:[%s]" % (timestamp,payload_str)
+        return "%s TXQUEUED \tPayload:[%s] \tQUEUE: %d" % (timestamp,payload_str,txqueuesize)
+    elif pkt_type == "ERROR":
+        timestamp = datetime.utcnow().isoformat()
+        error_str = udp_packet['str']
+        return "%s ERROR \t%s" % (timestamp,error_str)
     else:
         return "Not Implemented"
 

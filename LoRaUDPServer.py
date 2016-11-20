@@ -37,6 +37,19 @@
 #   {
 #       'type' : 'TXPKT',
 #       'payload' : [<payload as a list of bytes>] # Encode this using list(bytearray('string'))
+#       'destination' : payload_id # Optional field. If given, the UDP server will cache the packet in a separate queue, and 
+#                                    will wait until it observes a packet from the given payload ID before TXing.
+#   }
+#
+#   TRANSMIT QUEUE STATUS
+#   Provides information on the state of the Transmit Queue. Useful for sending lots of packets in a row.
+#   Send by LoRaUDPServer immediately after receiving a TXPKT message.
+#   ---------------------
+#   {
+#     'type' : 'TXQUEUED',
+#     'timestamp' : '<ISO-8601 formatted timestamp>',
+#     'payload' : [<payload as a list of bytes>]
+#     'txqueuesize' : Number of packets remaining in the transmit queue.
 #   }
 #
 #   TRANSMIT CONFIRMATION
@@ -46,7 +59,9 @@
 #     'type' : 'TXDONE',
 #     'timestamp' : '<ISO-8601 formatted timestamp>',
 #     'payload' : [<payload as a list of bytes>]
+#     'txqueuesize' : Number of packets remaining in the transmit queue.
 #   }
+#
 #
 #   STATUS PACKET
 #   Broadcast frequently (5Hz or so) to indicate current modem status, for
@@ -87,11 +102,10 @@
 #   }
 #
 
-import json,socket,Queue,random, argparse, sys
-from time import sleep
+import json,socket,Queue,random, argparse, sys, traceback, time
 from threading import Thread
 from HorusPackets import *
-from datetime import *
+from datetime import datetime
 
 
 from SX127x.LoRa import *
@@ -132,11 +146,17 @@ class LoRaTxRxCont(LoRa):
         self.max_payload = max_payload
         self.udp_broadcast_port = HORUS_UDP_PORT
 
+        self.udprxqueue = Queue.Queue(128) # Queue for incoming UDP packets to be processed.
         self.txqueue = Queue.Queue(TX_QUEUE_SIZE)
         self.udp_listener_running = False
 
         self.status_counter = 0
         self.status_throttle = 20
+
+        # TX-after-RX Queue. I with python queues had a peek method... 
+        # Data stored into this queue is of the form (payload,destination_id)
+        self.tx_after_rx = Queue.Queue(1)
+        self.default_tx_timeout = 15
 
 
     def set_common(self):
@@ -153,7 +173,7 @@ class LoRaTxRxCont(LoRa):
             self.set_bw(BW.BW125)
             self.set_coding_rate(CODING_RATE.CR4_8)
             self.set_spreading_factor(8)
-            self.set_low_data_rate_optim(False)
+            self.set_low_data_rate_optim(True)
             self.tx_delay_fudge = 1.2
         elif self.rf_mode==2:
             self.set_bw(BW.BW250)
@@ -207,6 +227,7 @@ class LoRaTxRxCont(LoRa):
             "freq_error": freq_error
 
         }
+        print(pkt_dict)
         self.udp_broadcast(pkt_dict)
 
     def on_rx_done(self):
@@ -223,12 +244,33 @@ class LoRaTxRxCont(LoRa):
 
         self.udp_send_rx(rxdata,snr,rssi,pkt_flags,freq_error)
 
-#        if pkt_flags["crc_error"] == 0:
-#            print(map(hex, rxdata))
-#            print("Payload: %s" %str(bytearray(rxdata)))
-#            decode_binary_packet(str(bytearray(rxdata)))
-#        else:
-#            print("Packet Failed CRC!")
+        # TX-After-RX Logic.
+        # We only transmit if:
+        #   - CRC is OK
+        #   - Payload type is a telemetry packet.
+        #   - Payload ID is the same as our destination. 
+        if (self.tx_after_rx.full()) and (pkt_flags['crc_error'] == 0): # CRC is OK, and we have something we might want to transmit.
+            print("Do we want to transmit now?")
+            if decode_payload_type(rxdata) == HORUS_PACKET_TYPES.PAYLOAD_TELEMETRY:
+                print("Packet is telemetry...")
+                # Grab the packet information to be transmitted off the tx-after-rx queue.
+                (tx_packet, dest_id, timeout) = self.tx_after_rx.get_nowait()
+
+                if decode_payload_id(rxdata) == dest_id:
+                    # Do stuff here.
+                    print("TX after RX time!")
+                    time.sleep(0.5)
+                    self.tx_packet(tx_packet)
+                else:
+                    # Push packet back onto queue.
+                    print("Not our destination ID: %d" % decode_payload_id(rxdata))
+                    if time.time() > timeout:
+                        print("TX Packet has timed out.")
+                        self.udp_broadcast({'type':'ERROR', 'str': 'TX-after-RX packed timed-out.'})
+                    else:
+                        self.tx_after_rx.put_nowait((tx_packet,dest_id,timeout))
+
+
         self.set_mode(MODE.SLEEP)
         self.reset_ptr_rx()
         self.BOARD.led_off()
@@ -244,16 +286,8 @@ class LoRaTxRxCont(LoRa):
         if len(data)>self.max_payload:
             data = data[:self.max_payload]
 
-        tx_timestamp = datetime.utcnow().isoformat()
-        # Broadast a UDP packet indicating we have a packet queued for transmit.
-        tx_indication = {
-            'type'  : "TXQUEUED",
-            'timestamp' : tx_timestamp,
-            'payload' : list(bytearray(data))
-        }
-        self.udp_broadcast(tx_indication)
 
-        print("Transmitting: %s" % data)
+        #print("Transmitting: %s" % data)
         # Write payload into fifo.
         self.set_mode(MODE.STDBY)
         self.set_lna_gain(GAIN.G6)
@@ -262,17 +296,17 @@ class LoRaTxRxCont(LoRa):
         self.set_fifo_tx_base_addr(0x00)
         self.set_payload_length(len(data))
         self.write_payload(list(bytearray(data)))
-        print(self.get_payload_length())
+        #print(self.get_payload_length())
         # Transmit!
         tx_timestamp = datetime.utcnow().isoformat()
-        print(datetime.utcnow().isoformat())
+        #print(datetime.utcnow().isoformat())
         self.clear_irq_flags()
         self.set_mode(MODE.TX)
         # Busy-wait until tx_done is raised.
-        print "Waiting for transmit to finish..."
+        #print "Waiting for transmit to finish..."
         # For some reason, if we start reading the IRQ flags immediately, the TX can
         # abort prematurely. Dunno why yet.
-        sleep(self.tx_delay_fudge)
+        time.sleep(self.tx_delay_fudge)
         # Can probably fix this by, y'know, using interrupt lines properly.
         #while(self.get_irq_flags()["tx_done"]==False):
         while(self.BOARD.read_gpio()[0] == 0):
@@ -282,16 +316,16 @@ class LoRaTxRxCont(LoRa):
         self.clear_irq_flags()
         self.set_rx_mode()
         
-        print(datetime.utcnow().isoformat())
+        #print(datetime.utcnow().isoformat())
         # Broadast a UDP packet indicating we have just transmitted.
         tx_indication = {
             'type'  : "TXDONE",
             'timestamp' : tx_timestamp,
-            'payload' : list(bytearray(data))
+            'payload' : list(bytearray(data)),
+            'txqueuesize' : self.txqueue.qsize()
         }
         self.udp_broadcast(tx_indication)
-
-        #self.set_mode(MODE.STDBY)
+        print("Transmitted: %s" % udp_packet_to_string(tx_indication))
         
         print("Done.")
 
@@ -305,7 +339,7 @@ class LoRaTxRxCont(LoRa):
                 print("Channel busy")
                 return
             else:
-                sleep(random.random()*0.2) # Wait a random length of time.
+                time.sleep(random.random()*0.2) # Wait a random length of time.
 
         # If we get this far, we'll assume the channel is clear, and transmit.
         try:
@@ -315,29 +349,45 @@ class LoRaTxRxCont(LoRa):
         # Transmit!
         self.tx_packet(data)
 
-
-    # Continuously listen on a UDP port for json data.
-    # If a valid packet is received, put it in the transmit queue.
-    # This function should be run in a separate thread.
-    def udp_listen(self):
-        s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-        s.settimeout(1)
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind(('',self.udp_broadcast_port))
-        print("Started UDP Listener Thread.")
-        self.udp_listener_running = True
-        while self.udp_listener_running:
+    # Process UDP datagram contents in here, to avoid tying up the UDP listen thread.
+    def udp_process(self):
+        self.udp_process_running = True
+        print("Started UDP Processing Thread.")
+        while self.udp_process_running:
+            time.sleep(0.1)
             try:
-                m = s.recvfrom(MAX_JSON_LEN)
-            except:
-                m = None
-
-            if m != None:
+                udp_datagram = self.udprxqueue.get_nowait()
+            except Exception as e:
+                pass
+            else:
                 try:
-                    m_data = json.loads(m[0])
+                    m_data = json.loads(udp_datagram)
                     # Packet to be transmitted.
                     if m_data['type'] == 'TXPKT':
-                        self.txqueue.put_nowait(m_data['payload']) # TODO: Data type checking.
+                        # Switch based on if we have a 'destination' field.
+                        if 'destination' in m_data.keys():
+                            dest_id = m_data['destination']
+                            if 'timeout' in m_data.keys():
+                                tx_timeout = time.time() + int(m_data['timeout'])
+                            else:
+                                tx_timeout = time.time() + self.default_tx_timeout
+                            try:
+                                self.tx_after_rx.put_nowait((m_data['payload'],dest_id,tx_timeout))
+                            except:
+                                self.udp_broadcast({'type':'ERROR', 'str': 'TX-after-RX Queue is full.'})
+                                continue
+                        else:
+                            self.txqueue.put_nowait(m_data['payload']) # TODO: Data type checking.
+
+                        tx_timestamp = datetime.utcnow().isoformat()
+                        tx_indication = {
+                            'type'  : "TXQUEUED",
+                            'timestamp' : tx_timestamp,
+                            'payload' : list(bytearray(m_data['payload'])),
+                            'txqueuesize' : self.txqueue.qsize()
+                        }
+                        self.udp_broadcast(tx_indication)
+                        print("Queued: %s" % udp_packet_to_string(m_data))
                     # Just a check to see if we are alive. Respond immediately.
                     elif m_data['type'] == 'PING':
                             ping_response = {
@@ -349,15 +399,46 @@ class LoRaTxRxCont(LoRa):
                         pass
                 except Exception as e:
                     print(e)
-                    print("ERROR: Received Malformed UDP Packet")
+                    print("ERROR: ")
+                    traceback.print_exc()
+                    
+        print("Shutting down UDP Processing Thread.")
+
+    # Continuously listen on a UDP port for json data.
+    # If a valid packet is received, put it in the transmit queue.
+    # This function should be run in a separate thread.
+    def udp_listen(self):
+        s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+        s.settimeout(1)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+        except:
+            pass
+        s.bind(('',self.udp_broadcast_port))
+        print("Started UDP Listener Thread.")
+        self.udp_listener_running = True
+        while self.udp_listener_running:
+            try:
+                m = s.recvfrom(MAX_JSON_LEN)
+            except:
+                m = None
+
+            if m != None:
+                self.udprxqueue.put_nowait(m[0])
         #
         print("Closing UDP Listener")
         s.close()
 
     def start(self):
         # Start up UDP listener thread.
-        t = Thread(target=self.udp_listen)
-        t.start()
+        udplistenthread = Thread(target=self.udp_listen)
+        udplistenthread.start()
+
+        udpprocessthread = Thread(target=self.udp_process)
+        udpprocessthread.start()
+
+
 
         # Startup LoRa hardware
         self.reset_ptr_rx()
@@ -365,7 +446,7 @@ class LoRaTxRxCont(LoRa):
         self.set_rx_mode()
         # Main loop
         while True:
-            sleep(0.05)
+            time.sleep(0.05)
             rssi_value = self.get_rssi_value()
             status = self.get_modem_status()
 
@@ -412,6 +493,7 @@ finally:
     print("")
     lora.set_mode(MODE.SLEEP)
     lora.udp_listener_running = False
+    lora.udp_process_running = False
     print(lora)
     print("Shutting down hardware interface...")
     hw.teardown()
