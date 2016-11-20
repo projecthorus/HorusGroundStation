@@ -71,7 +71,8 @@
 #       'type' : 'STATUS',
 #       'timestamp : '<ISO-8601 formatted timestamp>',
 #       'rssi' : <Current RSSI in dB>,
-#       'status': {<Current Modem Status, straight from pySX127x's get_modem_status()}
+#       'status': {<Current Modem Status, straight from pySX127x's get_modem_status()},
+#       'frequency': <Current RX frequency>
 #   }
 #
 #   RX DATA PACKET
@@ -99,6 +100,15 @@
 #   {
 #       'type' : 'PONG',
 #       'data' : '<Copy of whatever was in the PING packet>'
+#   }
+#
+#   RF
+#   Allows at-runtime variation of the operating frequency.
+#   The new frequency change will be reflected in the next STATUS packet.
+#   --
+#   {
+#       'type' : 'RF',
+#       'frequency' : <New operating frequency, in MHz.>
 #   }
 #
 
@@ -157,6 +167,10 @@ class LoRaTxRxCont(LoRa):
         # Data stored into this queue is of the form (payload,destination_id)
         self.tx_after_rx = Queue.Queue(1)
         self.default_tx_timeout = 15
+
+        # Settings change queue, as we need to do these changes in the main processing loop, not the UDP processing thread.
+        # These will just be (key,value) tuples to change some basic LoRa settings via UDP commands.
+        self.settings_changes = Queue.Queue(10)
 
 
     def set_common(self):
@@ -349,6 +363,23 @@ class LoRaTxRxCont(LoRa):
         # Transmit!
         self.tx_packet(data)
 
+    # Handle a settings update request. This is currently only used to update
+    # the operating frequency of the LoRa module at runtime.
+    # Could also use this to switch into a CW 'beacon' mode for DFing the car...
+    def updateSettings(self):
+        (parameter, value) = self.settings_changes.get_nowait()
+
+        if parameter == "frequency":
+            if (value <450.0) and (value > 430.0):
+                self.set_mode(MODE.STDBY)
+                self.set_freq(value)
+                self.set_rx_mode()
+                self.frequency = value
+                print("Frequency changed.")
+            else:
+                self.udp_broadcast({'type':'ERROR', 'str': 'Invalid operating frequency.'})
+
+
     # Process UDP datagram contents in here, to avoid tying up the UDP listen thread.
     def udp_process(self):
         self.udp_process_running = True
@@ -395,6 +426,11 @@ class LoRaTxRxCont(LoRa):
                                 'data' : m_data['data']
                             }
                             self.udp_broadcast(ping_response)
+                    elif m_data['type'] == 'RF':
+                        if 'frequency' in m_data.keys():
+                            new_freq = float(m_data['frequency'])
+                            self.settings_changes.put_nowait(('frequency',new_freq))
+                            
                     else:
                         pass
                 except Exception as e:
@@ -459,7 +495,9 @@ class LoRaTxRxCont(LoRa):
                     "timestamp" : datetime.utcnow().isoformat(),
                     'rssi'  : rssi_value,
                     'status': status,
-                    'txqueuesize': self.txqueue.qsize()
+                    'txqueuesize': self.txqueue.qsize(),
+                    'frequency' : self.frequency
+
                 }
                 self.udp_broadcast(status_dict)
 
@@ -473,6 +511,9 @@ class LoRaTxRxCont(LoRa):
             if(self.txqueue.qsize()>0):
                 # Something in the queue to be transmitted.
                 self.attemptTX()
+
+            if(self.settings_changes.qsize()>0):
+                self.updateSettings()
 
 
 lora = LoRaTxRxCont(hw,verbose=False,mode=mode,frequency=frequency)

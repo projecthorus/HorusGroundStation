@@ -373,7 +373,28 @@ def tx_packet(payload, blocking=False, timeout=4, destination=None, tx_timeout=1
     else:
         s.close()
 
+# Set new operating frequency on the UDP-LoRa bridge.
+def update_frequency(freq=431.650):
+    packet = {
+        'type' : 'RF',
+        'frequency': freq
+    }
 
+    # Set up our UDP socket
+    s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+    s.settimeout(1)
+    # Set up socket for broadcast, and allow re-use of the address
+    s.setsockopt(socket.SOL_SOCKET,socket.SO_BROADCAST,1)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+    except:
+        pass
+    s.bind(('',HORUS_UDP_PORT))
+    try:
+        s.sendto(json.dumps(packet), ('<broadcast>', HORUS_UDP_PORT))
+    except socket.error:
+        s.sendto(json.dumps(packet), ('127.0.0.1', HORUS_UDP_PORT))
 
 # Produce short string representation of packet payload contents.
 def payload_to_string(packet):
@@ -434,8 +455,9 @@ def udp_packet_to_string(udp_packet):
         timestamp = udp_packet['timestamp']
         rssi = float(udp_packet['rssi'])
         txqueuesize = udp_packet['txqueuesize']
+        frequency = udp_packet['frequency']
         # Insert Modem Status decoding code here.
-        return "%s STATUS \tRSSI: %.1f \tQUEUE: %d" % (timestamp,rssi,txqueuesize)
+        return "%s STATUS \t%.3f MHz \tRSSI: %.1f \tQUEUE: %d" % (timestamp,frequency,rssi,txqueuesize)
     elif pkt_type == "TXPKT":
         timestamp = datetime.utcnow().isoformat()
         payload_str = payload_to_string(udp_packet['payload'])
