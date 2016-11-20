@@ -313,7 +313,7 @@ def create_param_change_packet(param = HORUS_PAYLOAD_PARAMS.PING, value = 10, pa
     return param_packet
 
 # Transmit packet via UDP Broadcast
-def tx_packet(payload, blocking=False, timeout=4, destination=None):
+def tx_packet(payload, blocking=False, timeout=4, destination=None, tx_timeout=15):
     packet = {
         'type' : 'TXPKT',
         'payload' : list(bytearray(payload)),
@@ -321,6 +321,7 @@ def tx_packet(payload, blocking=False, timeout=4, destination=None):
     # Add in destination field if we have been given one.
     if destination != None:
         packet['destination'] = destination
+        packet['timeout'] = tx_timeout
 
     # Print some info about the packet.
     print packet
