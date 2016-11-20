@@ -235,8 +235,9 @@ def decode_horus_payload_telemetry(packet):
 
 # Convert telemetry dictionary to a Habitat-compatible telemetry string.
 # The below is compatible with genpayload doc ID# f18a873592a77ed01ea432c3bcc16d0f
-def telemetry_to_sentence(telemetry):
-    sentence = "$$HORUSLORA,%d,%s,%.5f,%.5f,%d,%d,%d,%.2f,%.2f,%d,%d" % (telemetry['counter'],telemetry['time'],telemetry['latitude'],
+def telemetry_to_sentence(telemetry, payload_id = None):
+    payload_id_str = "" if payload_id == None else str(payload_id)
+    sentence = "$$HORUSLORA%s,%d,%s,%.5f,%.5f,%d,%d,%d,%.2f,%.2f,%d,%d" % (payload_id_str,telemetry['counter'],telemetry['time'],telemetry['latitude'],
         telemetry['longitude'],telemetry['altitude'],telemetry['speed'],telemetry['sats'],telemetry['batt_voltage'],
         telemetry['pyro_voltage'],telemetry['RSSI'],telemetry['rxPktCount'])
 
@@ -275,7 +276,7 @@ def decode_command_ack(packet):
 
     return ack_packet
 
-def create_cutdown_packet(time=4,passcode="zzz"):
+def create_cutdown_packet(time=4,passcode="zzz", destination = -1):
     if len(passcode)<3: # Pad out passcode. This will probably cause the payload not to accept it though.
         passcode = passcode + "   "
 
@@ -293,7 +294,7 @@ def create_cutdown_packet(time=4,passcode="zzz"):
 
     return cutdown_packet
 
-def create_param_change_packet(param = HORUS_PAYLOAD_PARAMS.PING, value = 10, passcode = "zzz"):
+def create_param_change_packet(param = HORUS_PAYLOAD_PARAMS.PING, value = 10, passcode = "zzz", destination = -1):
     if len(passcode)<3: # Pad out passcode. This will probably cause the payload not to accept it though.
         passcode = passcode + "   "
     # Sanitize parameter and value inputs.
@@ -402,7 +403,7 @@ def payload_to_string(packet):
 
     if payload_type == HORUS_PACKET_TYPES.PAYLOAD_TELEMETRY:
         telemetry = decode_horus_payload_telemetry(packet)
-        data = "Balloon Telemetry: %s,%d,%.5f,%.5f,%d,%d,%.2f,%.2f,%d,%d" % (telemetry['time'],telemetry['counter'],
+        data = "Balloon #%d Telemetry: %s,%d,%.5f,%.5f,%d,%d,%.2f,%.2f,%d,%d" % (telemetry['payload_id'], telemetry['time'],telemetry['counter'],
             telemetry['latitude'],telemetry['longitude'],telemetry['altitude'],telemetry['sats'],telemetry['batt_voltage'],telemetry['pyro_voltage'],telemetry['rxPktCount'],telemetry['RSSI'])
         return data
     elif payload_type == HORUS_PACKET_TYPES.SHORT_TELEMETRY:
@@ -481,7 +482,8 @@ def udp_packet_to_string(udp_packet):
 
 # Habitat Upload Functions
 def habitat_upload_payload_telemetry(telemetry, callsign="N0CALL"):
-    sentence = telemetry_to_sentence(telemetry)
+
+    sentence = telemetry_to_sentence(telemetry, payload_id = telemetry['payload_id'])
 
     sentence_b64 = b64encode(sentence)
 

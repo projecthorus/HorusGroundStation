@@ -9,7 +9,7 @@ from HorusPackets import *
 from threading import Thread
 from PyQt4 import QtGui, QtCore
 from datetime import datetime
-import socket,json,sys,Queue,random,os,math
+import socket,json,sys,Queue,random,os,math,traceback
 import ConfigParser
 
 udp_broadcast_port = HORUS_UDP_PORT
@@ -26,6 +26,8 @@ app = QtGui.QApplication([])
 
 timer_update_rate = 0.1 # Seconds
 last_packet_timer = 0
+
+current_payload = -1
 
 # Variables for Ground Speed Calculation
 lastlat = -34.0
@@ -47,10 +49,37 @@ packetSnifferLayout.addWidget(packetSnifferTitle)
 packetSnifferLayout.addWidget(console)
 packetSnifferFrame.setLayout(packetSnifferLayout)
 
+# PAYLOAD SELECTION WIDGET
+payloadSelectionFrame = QtGui.QFrame()
+payloadSelectionFrame.setFixedSize(150,220)
+payloadSelectionFrame.setFrameStyle(QtGui.QFrame.Box)
+payloadSelectionFrame.setLineWidth(2)
+payloadSelectionTitle = QtGui.QLabel("<b><u>Payload ID</u></b>")
+payloadSelectionLabel = QtGui.QLabel("<b>Current:</b>")
+payloadSelectionValue = QtGui.QLabel("%d" % current_payload)
+payloadSelectionListLabel = QtGui.QLabel("<b>Heard Payloads:</b>")
+payloadSelectionList = QtGui.QListWidget()
+
+payloadSelectionLayout = QtGui.QGridLayout()
+payloadSelectionLayout.addWidget(payloadSelectionTitle,0,0,1,2)
+payloadSelectionLayout.addWidget(payloadSelectionLabel,1,0,1,1)
+payloadSelectionLayout.addWidget(payloadSelectionValue,1,1,1,1)
+payloadSelectionLayout.addWidget(payloadSelectionListLabel,2,0,1,2)
+payloadSelectionLayout.addWidget(payloadSelectionList,3,0,2,2)
+payloadSelectionFrame.setLayout(payloadSelectionLayout)
+
+def newSelectedPayload(curr, prev):
+    global current_payload
+    current_payload = int(curr.text())
+    payloadSelectionValue.setText("%d" % current_payload)
+    console.appendPlainText("PAYLOAD SELECTION SET TO #%d" % current_payload)
+
+payloadSelectionList.currentItemChanged.connect(newSelectedPayload)
+
 # LAST PACKET DATA WIDGET
 # Displays RSSI and SNR of the last Received Packet.
 lastPacketFrame = QtGui.QFrame()
-lastPacketFrame.setFixedSize(220,200)
+lastPacketFrame.setFixedSize(220,220)
 lastPacketFrame.setFrameStyle(QtGui.QFrame.Box)
 lastPacketFrame.setLineWidth(2)
 lastPacketTitle = QtGui.QLabel("<b><u>Last Packet</u></b>")
@@ -59,6 +88,8 @@ lastPacketCounterValue = QtGui.QLabel("%.1f seconds ago." % last_packet_timer)
 lastPacketTimeValue = QtGui.QLabel("No Packet Yet")
 lastPacketTypeLabel = QtGui.QLabel("<b>Type:</b>")
 lastPacketTypeValue = QtGui.QLabel("None")
+lastPacketIDLabel = QtGui.QLabel("<b>Source/Dest:</b>")
+lastPacketIDValue = QtGui.QLabel("-")
 lastPacketRSSILabel = QtGui.QLabel("<b>RSSI:</b>")
 lastPacketRSSIValue = QtGui.QLabel("-000 dBm")
 lastPacketSNRLabel = QtGui.QLabel("<b>SNR:</b>")
@@ -79,12 +110,14 @@ lastPacketLayout.addWidget(lastPacketFreqErrorLabel,6,0,1,1)
 lastPacketLayout.addWidget(lastPacketFreqErrorValue,6,1,1,1)
 lastPacketLayout.addWidget(lastPacketTypeLabel,7,0,1,1)
 lastPacketLayout.addWidget(lastPacketTypeValue,7,1,1,1)
+lastPacketLayout.addWidget(lastPacketIDLabel,8,0,1,1)
+lastPacketLayout.addWidget(lastPacketIDValue,8,1,1,1)
 lastPacketFrame.setLayout(lastPacketLayout)
 
 # PAYLOAD STATUS WIDGET
 # Displays Payload Stats.
 payloadStatusFrame = QtGui.QFrame()
-payloadStatusFrame.setFixedSize(180,200)
+payloadStatusFrame.setFixedSize(180,220)
 payloadStatusFrame.setFrameStyle(QtGui.QFrame.Box)
 payloadStatusFrame.setLineWidth(1)
 payloadStatusTitle = QtGui.QLabel("<b><u>Payload Position</u></b>")
@@ -126,7 +159,7 @@ payloadStatusFrame.setLayout(payloadStatusLayout)
 # PAYLOAD OTHER VALUES
 # More payload stats!
 payloadOtherStatusFrame = QtGui.QFrame()
-payloadOtherStatusFrame.setFixedSize(180,200)
+payloadOtherStatusFrame.setFixedSize(180,220)
 payloadOtherStatusFrame.setFrameStyle(QtGui.QFrame.Box)
 payloadOtherStatusFrame.setLineWidth(1)
 payloadOtherStatusTitle = QtGui.QLabel("<b><u>Payload Telemetry</u></b>")
@@ -202,14 +235,15 @@ def cutdownCommandChanged(text):
 cutdownCommandValue.activated[str].connect(cutdownCommandChanged)
 
 def cutdownButtonPressed():
+    global current_payload
     cutdown_password = str(cutdownParameterPassword.text())
     uplink_value = int(str(cutdownParameterValue.text()))
     if str(cutdownCommandValue.currentText()) == "Ping":
-        ping_packet = create_param_change_packet(param = HORUS_PAYLOAD_PARAMS.PING, value = uplink_value, passcode = cutdown_password)
-        tx_packet(ping_packet)
+        ping_packet = create_param_change_packet(param = HORUS_PAYLOAD_PARAMS.PING, value = uplink_value, passcode = cutdown_password, destination = current_payload)
+        tx_packet(ping_packet, destination = current_payload)
     elif str(cutdownCommandValue.currentText()) == "Cutdown":
         msgBox = QtGui.QMessageBox()
-        msgBox.setText("Are you sure you want to cutdown?")
+        msgBox.setText("Are you sure you want to cutdown payload ID #%d?" % current_payload)
         msgBox.setInformativeText("Really really really sure?")
         msgBox.setStandardButtons(QtGui.QMessageBox.Yes | QtGui.QMessageBox.No)
         msgBox.setDefaultButton(QtGui.QMessageBox.No)
@@ -219,10 +253,10 @@ def cutdownButtonPressed():
         else:
             # Actually Cutdown!
             cutdown_packet = create_cutdown_packet(time=uplink_value,passcode = cutdown_password)
-            tx_packet(cutdown_packet)
+            tx_packet(cutdown_packet, destination = current_payload)
     elif str(cutdownCommandValue.currentText()) == "Update Rate":
-        param_packet = create_param_change_packet(param = HORUS_PAYLOAD_PARAMS.LISTEN_TIME, value = uplink_value, passcode = cutdown_password)
-        tx_packet(param_packet)
+        param_packet = create_param_change_packet(param = HORUS_PAYLOAD_PARAMS.LISTEN_TIME, value = uplink_value, passcode = cutdown_password, destination = current_payload)
+        tx_packet(param_packet, destination = current_payload)
     else:
         pass
 cutdownButton.clicked.connect(cutdownButtonPressed)
@@ -290,7 +324,7 @@ uploadFrameLayout.addWidget(uploadFrameFoxTrot,5,0,1,1)
 uploadFrame.setLayout(uploadFrameLayout)
 
 def habitat_upload(telemetry):
-    sentence = telemetry_to_sentence(telemetry)
+    sentence = telemetry_to_sentence(telemetry, payload_id=telemetry['payload_id'])
     timestamp = datetime.utcnow().isoformat()
     (success,error) = habitat_upload_payload_telemetry(telemetry,callsign=str(uploadFrameCallsign.text()))
     if success:
@@ -338,15 +372,16 @@ main_widget = QtGui.QWidget()
 layout = QtGui.QGridLayout()
 main_widget.setLayout(layout)
 # Add Widgets
-layout.addWidget(lastPacketFrame,0,0,2,1)
-layout.addWidget(payloadStatusFrame,0,1,2,1)
-layout.addWidget(payloadOtherStatusFrame,0,2,2,1)
+layout.addWidget(payloadSelectionFrame,0,0,2,1)
+layout.addWidget(lastPacketFrame,0,1,2,1)
+layout.addWidget(payloadStatusFrame,0,2,2,1)
+layout.addWidget(payloadOtherStatusFrame,0,3,2,1)
 
-layout.addWidget(cutdownFrame,0,3,1,2)
-layout.addWidget(cutdownResponseFrame,1,3,1,2)
+layout.addWidget(cutdownFrame,0,4,1,2)
+layout.addWidget(cutdownResponseFrame,1,4,1,2)
 
-layout.addWidget(packetSnifferFrame,2,0,1,3)
-layout.addWidget(uploadFrame,2,3,1,1)
+layout.addWidget(packetSnifferFrame,2,0,1,4)
+layout.addWidget(uploadFrame,2,4,1,1)
 
 mainwin = QtGui.QMainWindow()
 
@@ -413,8 +448,19 @@ def speed_calc(lat,lon,lat2,lon2,timediff):
     speed = 3600*distance/float(timediff)
     return speed
 
+def getHeardPayloadList():
+    global payloadSelectionList
+    if payloadSelectionList.__len__() == 0:
+        return []
+    else:
+        payloads = []
+        for x in range(payloadSelectionList.__len__()):
+            # Note that we have to store items in the list as strings, so convert back to int.
+            payloads.append(int(payloadSelectionList.item(x).text()))
+        return payloads
+
 def processPacket(packet):
-    global last_packet_timer,lastlat,lastlon,lasttime
+    global last_packet_timer, lastlat, lastlon, lasttime, current_payload
     last_packet_timer = 0.0
     # Immediately update the last packet data.
     try:
@@ -422,6 +468,7 @@ def processPacket(packet):
         lastPacketSNRValue.setText("%.1f dB" % packet['snr'])
         lastPacketTimeValue.setText(packet['timestamp'])
         lastPacketFreqErrorValue.setText("%.1f Hz" % packet['freq_error'])
+        lastPacketIDValue.setText("%d" % decode_payload_id(packet['payload']))
     except:
         pass
 
@@ -433,6 +480,23 @@ def processPacket(packet):
     
     # Now delve into the payload.
     payload = packet['payload']
+
+    payload_id = decode_payload_id(payload)
+
+    # If we haven't heard any payloads yet, add this new payload to the list and set it as the current payload.
+    if len(getHeardPayloadList()) == 0:
+        payloadSelectionList.addItem(str(payload_id))
+        payloadSelectionList.setCurrentRow(0)
+        current_payload = payload_id
+
+    if payload_id not in getHeardPayloadList():
+        payloadSelectionList.addItem(str(payload_id))
+
+    # Only proceed if the data is from our current payload.
+    # The decoded string data will still show up in the packet sniffer window.
+    if payload_id != current_payload:
+        return
+
     payload_type = decode_payload_type(payload)
 
     if payload_type == HORUS_PACKET_TYPES.PAYLOAD_TELEMETRY:
@@ -495,6 +559,7 @@ def process_udp(udp_packet):
     except Exception as e:
         print(udp_packet)
         print(e)
+        traceback.print_exc()
 
 def udp_rx_thread():
     global udp_listener_running
