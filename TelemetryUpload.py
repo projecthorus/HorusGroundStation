@@ -30,7 +30,7 @@ def write_log_entry(packet):
 	else:
 		if decode_payload_type(packet['payload']) == HORUS_PACKET_TYPES.PAYLOAD_TELEMETRY:
 			telemetry = decode_horus_payload_telemetry(packet['payload'])
-			sentence = telemetry_to_sentence(telemetry)
+			sentence = telemetry_to_sentence(telemetry, payload_id = telemetry['payload_id'])
 		else:
 			sentence = "NOT TELEMETRY\n"
 
