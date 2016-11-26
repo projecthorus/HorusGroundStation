@@ -264,7 +264,7 @@ def crc16_ccitt(data):
 # Command ACK Packet. Sent by the payload to acknowledge a command (i.e. cutdown or param change) has been executed.
 def decode_command_ack(packet):
     packet = list(bytearray(packet))
-    if len(packet) != 7:
+    if len(packet) != 8:
         print "Invalid length for Command ACK."
         return {}
 
