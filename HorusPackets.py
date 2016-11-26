@@ -291,7 +291,7 @@ def create_cutdown_packet(time=4,passcode="zzz", destination = 0):
 
     # TODO: Sanitise destination field input.
 
-    cutdown_packet = [HORUS_PACKET_TYPES.CUTDOWN_COMMAND,0,0,0,0,0,0]
+    cutdown_packet = [HORUS_PACKET_TYPES.CUTDOWN_COMMAND,0,0,0,0,0,0,0]
     cutdown_packet[2] = destination
     cutdown_packet[3] = ord(passcode[0])
     cutdown_packet[4] = ord(passcode[1])

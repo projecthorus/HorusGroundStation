@@ -27,7 +27,7 @@ app = QtGui.QApplication([])
 timer_update_rate = 0.1 # Seconds
 last_packet_timer = 0
 
-current_payload = -1
+current_payload = 255
 
 # Variables for Ground Speed Calculation
 lastlat = -34.0
@@ -252,7 +252,7 @@ def cutdownButtonPressed():
             return
         else:
             # Actually Cutdown!
-            cutdown_packet = create_cutdown_packet(time=uplink_value,passcode = cutdown_password)
+            cutdown_packet = create_cutdown_packet(time=uplink_value,passcode = cutdown_password, destination = current_payload)
             tx_packet(cutdown_packet, destination = current_payload)
     elif str(cutdownCommandValue.currentText()) == "Update Rate":
         param_packet = create_param_change_packet(param = HORUS_PAYLOAD_PARAMS.LISTEN_TIME, value = uplink_value, passcode = cutdown_password, destination = current_payload)
