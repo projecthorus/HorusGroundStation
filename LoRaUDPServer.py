@@ -515,6 +515,16 @@ class LoRaTxRxCont(LoRa):
             if(self.settings_changes.qsize()>0):
                 self.updateSettings()
 
+            # Check if the tx_after_rx packet has timed out
+            if self.tx_after_rx.qsize()>0:
+                (tx_packet, dest_id, timeout) = self.tx_after_rx.get_nowait()
+                if time.time() > timeout:
+                    print("TX-after-RX Packet automatically timed out.")
+                    self.udp_broadcast({'type':'ERROR', 'str': 'TX-after-RX packed timed-out.'})
+                else:
+                    self.tx_after_rx.put_nowait((tx_packet,dest_id,timeout))
+
+
 
 lora = LoRaTxRxCont(hw,verbose=False,mode=mode,frequency=frequency)
 #lora.set_pa_config(max_power=0, output_power=0)

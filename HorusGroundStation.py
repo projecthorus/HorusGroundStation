@@ -268,16 +268,33 @@ def cutdownButtonPressed():
         # If we have seen a payload with this ID, prompt the user.
         if uplink_value in getHeardPayloadList():
             msgBox = QtGui.QMessageBox()
-            msgBox.setText("Specified Payload ID has been seen recently, are you sure?" % current_payload)
+            msgBox.setText("Specified Payload ID has been seen recently, are you sure?")
             msgBox.setStandardButtons(QtGui.QMessageBox.Yes | QtGui.QMessageBox.No)
             msgBox.setDefaultButton(QtGui.QMessageBox.No)
             reply = msgBox.exec_()
             if reply == QtGui.QMessageBox.No:
                 return
 
+        msgBox = QtGui.QMessageBox()
+        msgBox.setText("Are you sure you want to change Payload #%d to Payload #%d?" % (current_payload, uplink_value))
+        msgBox.setStandardButtons(QtGui.QMessageBox.Yes | QtGui.QMessageBox.No)
+        msgBox.setDefaultButton(QtGui.QMessageBox.No)
+        reply = msgBox.exec_()
+        if reply == QtGui.QMessageBox.No:
+            return
+
         param_packet = create_param_change_packet(param = HORUS_PAYLOAD_PARAMS.PAYLOAD_ID, value = uplink_value, passcode = cutdown_password, destination = current_payload)
         tx_packet(param_packet, destination = current_payload)
     elif str(cutdownCommandValue.currentText()) == "Set Num Payloads":
+
+        msgBox = QtGui.QMessageBox()
+        msgBox.setText("Are you sure you want set Payload #%d's num_payloads variable to %d?" % (current_payload, uplink_value))
+        msgBox.setStandardButtons(QtGui.QMessageBox.Yes | QtGui.QMessageBox.No)
+        msgBox.setDefaultButton(QtGui.QMessageBox.No)
+        reply = msgBox.exec_()
+        if reply == QtGui.QMessageBox.No:
+            return
+
         param_packet = create_param_change_packet(param = HORUS_PAYLOAD_PARAMS.NUM_PAYLOADS, value = uplink_value, passcode = cutdown_password, destination = current_payload)
         tx_packet(param_packet, destination = current_payload)
     else:
