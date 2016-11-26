@@ -32,6 +32,7 @@ class HORUS_PAYLOAD_PARAMS:
     LISTEN_TIME           = 1
 
 
+
 # Some utilities to use in other programs.
 def decode_payload_type(packet):
     # This expects the payload as an integer list. Convert it to one if it isn't already
@@ -68,28 +69,29 @@ def decode_payload_flags(packet):
 # Payload Format:
 # Byte 0 - Payload ID
 # Byte 1 - Payload Flags
-# Byte 2-9 - Callsign (Max 8 chars. Padded to 8 characters if shorter.)
-# Bytes 10-63 - Message (Max 55 characters. Not padded!)
-def create_text_message_packet(source="N0CALL", message="CQ CQ CQ"):
+# Byte 2 - Destination ID (the payload that will repeat this packet)
+# Byte 3-10 - Callsign (Max 8 chars. Padded to 8 characters if shorter.)
+# Bytes 11-64 - Message (Max 54 characters. Not padded!)
+def create_text_message_packet(source="N0CALL", message="CQ CQ CQ", destination=0):
     # Sanitise input
     if len(source)>8:
         source = source[:8]
 
-    if len(message)>54:
-        message = message[:54]
+    if len(message)>53:
+        message = message[:53]
 
     # Pad data if required.
     if len(source)<8:
         source = source + "\x00"*(8-len(source))
 
-    packet = [HORUS_PACKET_TYPES.TEXT_MESSAGE,0] + list(bytearray(source)) + list(bytearray(message))
+    packet = [HORUS_PACKET_TYPES.TEXT_MESSAGE,0,destination] + list(bytearray(source)) + list(bytearray(message))
     return packet
 
 def read_text_message_packet(packet):
     # Convert packet into a string, if it isn't one already.
     packet = str(bytearray(packet))
-    source = packet[2:9].rstrip(' \t\r\n\0')
-    message = packet[10:].rstrip('\n\0')
+    source = packet[3:10].rstrip(' \t\r\n\0')
+    message = packet[11:].rstrip('\n\0')
     return (source,message)
 
 # SSDV Packets
@@ -263,20 +265,21 @@ def decode_command_ack(packet):
         return {}
 
     ack_packet = {}
-    ack_packet['rssi'] = packet[2] - 164
-    ack_packet['snr'] = struct.unpack('b',str(bytearray([packet[3]])))[0]/4.
-    if packet[4] == HORUS_PACKET_TYPES.CUTDOWN_COMMAND:
+    ack_packet['payload_id'] = packet[2]
+    ack_packet['rssi'] = packet[3] - 164
+    ack_packet['snr'] = struct.unpack('b',str(bytearray([packet[4]])))[0]/4.
+    if packet[5] == HORUS_PACKET_TYPES.CUTDOWN_COMMAND:
         ack_packet['command'] = "Cutdown"
-        ack_packet['argument'] = "%d Seconds." % packet[5]
-    elif packet[4] == HORUS_PACKET_TYPES.PARAMETER_CHANGE:
+        ack_packet['argument'] = "%d Seconds." % packet[6]
+    elif packet[5] == HORUS_PACKET_TYPES.PARAMETER_CHANGE:
         ack_packet['command'] = "Param Change"
-        ack_packet['argument'] = "%d %d" % (packet[5], packet[6])
-        ack_packet['param'] = packet[5]
-        ack_packet['value'] = packet[6]
+        ack_packet['argument'] = "%d %d" % (packet[6], packet[7])
+        ack_packet['param'] = packet[6]
+        ack_packet['value'] = packet[7]
 
     return ack_packet
 
-def create_cutdown_packet(time=4,passcode="zzz", destination = -1):
+def create_cutdown_packet(time=4,passcode="zzz", destination = 0):
     if len(passcode)<3: # Pad out passcode. This will probably cause the payload not to accept it though.
         passcode = passcode + "   "
 
@@ -286,15 +289,18 @@ def create_cutdown_packet(time=4,passcode="zzz", destination = -1):
     if time<0:
         time = 0
 
-    cutdown_packet = [HORUS_PACKET_TYPES.CUTDOWN_COMMAND,0,0,0,0,0]
-    cutdown_packet[2] = ord(passcode[0])
-    cutdown_packet[3] = ord(passcode[1])
-    cutdown_packet[4] = ord(passcode[2])
-    cutdown_packet[5] = time
+    # TODO: Sanitise destination field input.
+
+    cutdown_packet = [HORUS_PACKET_TYPES.CUTDOWN_COMMAND,0,0,0,0,0,0]
+    cutdown_packet[2] = destination
+    cutdown_packet[3] = ord(passcode[0])
+    cutdown_packet[4] = ord(passcode[1])
+    cutdown_packet[5] = ord(passcode[2])
+    cutdown_packet[6] = time
 
     return cutdown_packet
 
-def create_param_change_packet(param = HORUS_PAYLOAD_PARAMS.PING, value = 10, passcode = "zzz", destination = -1):
+def create_param_change_packet(param = HORUS_PAYLOAD_PARAMS.PING, value = 10, passcode = "zzz", destination = 0):
     if len(passcode)<3: # Pad out passcode. This will probably cause the payload not to accept it though.
         passcode = passcode + "   "
     # Sanitize parameter and value inputs.
@@ -304,12 +310,16 @@ def create_param_change_packet(param = HORUS_PAYLOAD_PARAMS.PING, value = 10, pa
     if value>255:
         value = 255
 
-    param_packet = [HORUS_PACKET_TYPES.PARAMETER_CHANGE,0,0,0,0,0,0]
-    param_packet[2] = ord(passcode[0])
-    param_packet[3] = ord(passcode[1])
-    param_packet[4] = ord(passcode[2])
-    param_packet[5] = param
-    param_packet[6] = value
+    # TODO: Sanitise destination field input.
+
+
+    param_packet = [HORUS_PACKET_TYPES.PARAMETER_CHANGE,0,0,0,0,0,0,0]
+    param_packet[2] = destination
+    param_packet[3] = ord(passcode[0])
+    param_packet[4] = ord(passcode[1])
+    param_packet[5] = ord(passcode[2])
+    param_packet[6] = param
+    param_packet[7] = value
 
     return param_packet
 
@@ -424,7 +434,7 @@ def payload_to_string(packet):
 
     elif payload_type == HORUS_PACKET_TYPES.COMMAND_ACK:
         ack = decode_command_ack(packet)
-        data = "Command ACK: [R: %d dBm, S:%.1fdB] %s %s" % (ack['rssi'], ack['snr'], ack['command'], ack['argument'])
+        data = "Command ACK, Payload #%d : [R: %d dBm, S:%.1fdB] %s %s" % (ack['payload_id'],ack['rssi'], ack['snr'], ack['command'], ack['argument'])
         return data
     elif payload_type == HORUS_PACKET_TYPES.PARAMETER_CHANGE:
         return "Parameter Change"
