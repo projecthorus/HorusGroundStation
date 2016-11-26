@@ -16,6 +16,7 @@ udp_broadcast_port = HORUS_UDP_PORT
 udp_listener_running = False
 
 foxtrot_log = "foxtrot.log"
+groundstation_log = "groundstation.log"
 
 # RX Message queue to avoid threading issues.
 rxqueue = Queue.Queue(16)
@@ -264,6 +265,16 @@ def cutdownButtonPressed():
         param_packet = create_param_change_packet(param = HORUS_PAYLOAD_PARAMS.LISTEN_TIME, value = uplink_value, passcode = cutdown_password, destination = current_payload)
         tx_packet(param_packet, destination = current_payload)
     elif str(cutdownCommandValue.currentText()) == "Set Payload ID":
+        # If we have seen a payload with this ID, prompt the user.
+        if uplink_value in getHeardPayloadList():
+            msgBox = QtGui.QMessageBox()
+            msgBox.setText("Specified Payload ID has been seen recently, are you sure?" % current_payload)
+            msgBox.setStandardButtons(QtGui.QMessageBox.Yes | QtGui.QMessageBox.No)
+            msgBox.setDefaultButton(QtGui.QMessageBox.No)
+            reply = msgBox.exec_()
+            if reply == QtGui.QMessageBox.No:
+                return
+
         param_packet = create_param_change_packet(param = HORUS_PAYLOAD_PARAMS.PAYLOAD_ID, value = uplink_value, passcode = cutdown_password, destination = current_payload)
         tx_packet(param_packet, destination = current_payload)
     elif str(cutdownCommandValue.currentText()) == "Set Num Payloads":
@@ -376,6 +387,9 @@ except:
 if os.path.exists(foxtrot_log):
     print("Found Existing GPS Log. Removing.")
     os.remove(foxtrot_log)
+
+# Open Ground Station telemetry log for append
+gs_log = open(groundstation_log,'a')
 
 #
 # Create and Lay-out window
