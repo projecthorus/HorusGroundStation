@@ -27,7 +27,7 @@ app = QtGui.QApplication([])
 timer_update_rate = 0.1 # Seconds
 last_packet_timer = 0
 
-current_payload = 255
+current_payload = 0
 
 # Variables for Ground Speed Calculation
 lastlat = -34.0
@@ -199,6 +199,8 @@ cutdownCommandValue = QtGui.QComboBox()
 cutdownCommandValue.addItem("Ping")
 cutdownCommandValue.addItem("Cutdown")
 cutdownCommandValue.addItem("Update Rate")
+cutdownCommandValue.addItem("Set Payload ID")
+cutdownCommandValue.addItem("Set Num Payloads")
 cutdownParameterLabel = QtGui.QLabel("<b>Value</b>")
 cutdownParameterValue = QtGui.QLineEdit("4")
 cutdownParameterPasswordLabel = QtGui.QLabel("<b>Password</b>")
@@ -229,6 +231,10 @@ def cutdownCommandChanged(text):
         cutdownParameterValue.setText("%d"%uplink_value)
     elif text == "Update Rate":
         cutdownParameterValue.setText("10")
+    elif text == "Set Payload ID":
+        cutdownParameterValue.setText("%d"%(current_payload+1))
+    elif text == "Set Num Payloads":
+        cutdownParameterValue.setText("%d"%(current_payload+1))
     else:
         pass
 
@@ -256,6 +262,12 @@ def cutdownButtonPressed():
             tx_packet(cutdown_packet, destination = current_payload)
     elif str(cutdownCommandValue.currentText()) == "Update Rate":
         param_packet = create_param_change_packet(param = HORUS_PAYLOAD_PARAMS.LISTEN_TIME, value = uplink_value, passcode = cutdown_password, destination = current_payload)
+        tx_packet(param_packet, destination = current_payload)
+    elif str(cutdownCommandValue.currentText()) == "Set Payload ID":
+        param_packet = create_param_change_packet(param = HORUS_PAYLOAD_PARAMS.PAYLOAD_ID, value = uplink_value, passcode = cutdown_password, destination = current_payload)
+        tx_packet(param_packet, destination = current_payload)
+    elif str(cutdownCommandValue.currentText()) == "Set Num Payloads":
+        param_packet = create_param_change_packet(param = HORUS_PAYLOAD_PARAMS.NUM_PAYLOADS, value = uplink_value, passcode = cutdown_password, destination = current_payload)
         tx_packet(param_packet, destination = current_payload)
     else:
         pass

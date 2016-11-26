@@ -30,6 +30,10 @@ class HORUS_PACKET_TYPES:
 class HORUS_PAYLOAD_PARAMS:
     PING                  = 0
     LISTEN_TIME           = 1
+    TDMA_MODE             = 2 # Currently unused
+    TDMA_SLOT             = 3 # Currently unused
+    PAYLOAD_ID            = 4
+    NUM_PAYLOADS          = 5
 
 
 
