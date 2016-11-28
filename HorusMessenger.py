@@ -169,8 +169,7 @@ def process_udp(udp_packet):
             status_text = "%s RSSI: %.1f dBm" % (timestamp,rssi)
             statusLabel.setText(status_text)
         else:
-            print("Got other packet type...")
-            print packet_dict['payload']
+            print("Got other packet type (%s)" % packet_dict['type'])
     except:
         traceback.print_exc()
         pass
