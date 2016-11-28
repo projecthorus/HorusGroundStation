@@ -11,7 +11,7 @@
 from HorusPackets import *
 from threading import Thread
 from datetime import datetime
-import socket,json,sys,argparse
+import socket,json,sys,argparse,ConfigParser
 
 udp_broadcast_port = HORUS_UDP_PORT
 udp_listener_running = False
@@ -20,6 +20,16 @@ parser = argparse.ArgumentParser()
 parser.add_argument("callsign", help="Listener Callsign")
 parser.add_argument("-l","--log_file",default="telemetry.log",help="Log file for RX Telemetry")
 args = parser.parse_args()
+
+# Read in payload callsign from config file.
+try:
+    config = ConfigParser.ConfigParser()
+    config.read('defaults.cfg')
+    payload_callsign = config.get('Payload','payload_callsign')
+except:
+    print("Problems reading configuration file, skipping...")
+    payload_callsign = "HORUSLORA"
+
 
 def write_log_entry(packet):
 	timestamp = datetime.utcnow().isoformat()
@@ -60,8 +70,8 @@ def process_udp(udp_packet):
 		# Only process payload telemetry packets.
 		if payload_type == HORUS_PACKET_TYPES.PAYLOAD_TELEMETRY:
 			telemetry = decode_horus_payload_telemetry(payload)
-			sentence = telemetry_to_sentence(telemetry)
-			(success,error) = habitat_upload_payload_telemetry(telemetry,callsign=args.callsign)
+			sentence = telemetry_to_sentence(telemetry, payload_callsign=payload_callsign, payload_id=telemetry['payload_id'])
+			(success,error) = habitat_upload_payload_telemetry(telemetry, payload_callsign=payload_callsign, callsign=args.callsign)
 			if success:
 				print("Uploaded Successfuly!")
 			else:

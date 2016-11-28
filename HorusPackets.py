@@ -241,9 +241,9 @@ def decode_horus_payload_telemetry(packet):
 
 # Convert telemetry dictionary to a Habitat-compatible telemetry string.
 # The below is compatible with genpayload doc ID# f18a873592a77ed01ea432c3bcc16d0f
-def telemetry_to_sentence(telemetry, payload_id = None):
+def telemetry_to_sentence(telemetry, payload_callsign="HORUSLORA", payload_id = None):
     payload_id_str = "" if payload_id == None else str(payload_id)
-    sentence = "$$HORUSLORA%s,%d,%s,%.5f,%.5f,%d,%d,%d,%.2f,%.2f,%d,%d" % (payload_id_str,telemetry['counter'],telemetry['time'],telemetry['latitude'],
+    sentence = "$$%s%s,%d,%s,%.5f,%.5f,%d,%d,%d,%.2f,%.2f,%d,%d" % (payload_callsign,payload_id_str,telemetry['counter'],telemetry['time'],telemetry['latitude'],
         telemetry['longitude'],telemetry['altitude'],telemetry['speed'],telemetry['sats'],telemetry['batt_voltage'],
         telemetry['pyro_voltage'],telemetry['RSSI'],telemetry['rxPktCount'])
 
@@ -495,9 +495,9 @@ def udp_packet_to_string(udp_packet):
         return "Not Implemented"
 
 # Habitat Upload Functions
-def habitat_upload_payload_telemetry(telemetry, callsign="N0CALL"):
+def habitat_upload_payload_telemetry(telemetry, payload_callsign = "HORUSLORA", callsign="N0CALL"):
 
-    sentence = telemetry_to_sentence(telemetry, payload_id = telemetry['payload_id'])
+    sentence = telemetry_to_sentence(telemetry, payload_callsign = payload_callsign, payload_id = telemetry['payload_id'])
 
     sentence_b64 = b64encode(sentence)
 

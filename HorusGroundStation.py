@@ -19,7 +19,8 @@ foxtrot_log = "foxtrot.log"
 groundstation_log = "groundstation.log"
 
 # RX Message queue to avoid threading issues.
-rxqueue = Queue.Queue(16)
+RX_QUEUE_SIZE = 32
+rxqueue = Queue.Queue(RX_QUEUE_SIZE)
 txed_packets = []
 
 # PyQt Window Setup
@@ -623,7 +624,15 @@ def udp_rx_thread():
             m = None
         
         if m != None:
-            rxqueue.put_nowait(m[0])
+            # Realistically the only way the rx queue will get full is on OSX,
+            # where the app goes into a 'nap' state, and the GUI thread stops.
+            if rxqueue.qsize()<(RX_QUEUE_SIZE-1):
+                rxqueue.put_nowait(m[0])
+            else:
+                # Discard packets at this point.
+                print("UDP Packet discarded.")
+                pass
+
     
     print("Closing UDP Listener")
     s.close()

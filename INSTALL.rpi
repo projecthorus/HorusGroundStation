@@ -67,7 +67,7 @@ Add a line in here with the above hostname, so it resolves to localhost.
 	(wait a while...)
 
 8. Install the packages we need.
-	> sudo apt-get install python-dev python-serial
+	> sudo apt-get install python-dev python-serial python-pip python-spidev git 
 	> sudo pip install crcmod
 
 9. Clone the required repositories.
@@ -88,8 +88,9 @@ Add a line in here with the above hostname, so it resolves to localhost.
 				using a SPIBridge unit.
 	frequency = operating frequency in MHz (i.e. 434.650)
 
-	You should now be able to run the HorusGroundStation.pyw python script on another machine on the network 
+	You should now be able to run the HorusGroundStation.py python script on another machine on the network 
 	and see STATUS packets flowing.
+
 
 12. Make LoRaUDPServer.py autostart...
 	> sudo vim/nano/whatever /etc/rc.local
@@ -101,10 +102,12 @@ Add a line in here with the above hostname, so it resolves to localhost.
 	_IP=$(hostname -I) || true
 	if [ "$_IP" ]; then
 	  printf "My IP address is %s\n" "$_IP"
-	  sudo python /home/YOURUSERNAME/HorusGroundStation/LoRaUDPServer.py --rpishield -d device -f frequency &
+	  python /home/YOURUSERNAME/HorusGroundStation/LoRaUDPServer.py --rpishield -d device -f frequency &
 	fi
 
 	exit 0
+
+	Optionally you might want to run TelemetryUpload.py on boot as well, run python TelemetryUpload.py --help to check command line options.
 
 13. Reboot and check it works!
 	> sudo shutdown -r now
