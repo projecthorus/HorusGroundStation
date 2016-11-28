@@ -2,6 +2,11 @@
 Ground-station utilities for the LoRa systems used by Project Horus.
 Intended to be used to communicate with payloads running: https://github.com/projecthorus/FlexTrack-Horus
 
+
+## History
+* v1.0 - Initial version, no TDMA support. Used on all Project Horus flights from Late 2015 through to November 2016.
+* <latest> - Updated version, in preparation for multiple-payload launches. TDMA support added, numerous packet format and GUI updates.
+
 ## Dependencies
 * Python 2.7
   * This should be stock on most modern linux distros.
