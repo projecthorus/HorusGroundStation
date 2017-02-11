@@ -172,6 +172,12 @@ class LoRaTxRxCont(LoRa):
         # These will just be (key,value) tuples to change some basic LoRa settings via UDP commands.
         self.settings_changes = Queue.Queue(10)
 
+        # Low Priority Packet related variables
+        # This data is sent whenever the relevant payload indicates that is is 'our' time to transmit.
+        self.my_uplink_timeslot = -1
+        self.low_priority_destination = -1
+        self.low_priority_packet = []
+
 
     def set_common(self):
         self.set_mode(MODE.STDBY)
@@ -273,7 +279,7 @@ class LoRaTxRxCont(LoRa):
                 if decode_payload_id(rxdata) == dest_id:
                     # Do stuff here.
                     print("TX after RX time!")
-                    time.sleep(0.5)
+                    time.sleep(TX_AFTER_RX_DELAY)
                     self.tx_packet(tx_packet)
                 else:
                     # Push packet back onto queue.
@@ -283,6 +289,43 @@ class LoRaTxRxCont(LoRa):
                         self.udp_broadcast({'type':'ERROR', 'str': 'TX-after-RX packed timed-out.'})
                     else:
                         self.tx_after_rx.put_nowait((tx_packet,dest_id,timeout))
+
+        # Uplink timeslot request logic
+        elif (self.my_uplink_timeslot == -1):
+            # TODO.
+            pass
+
+        # 'Low Priority' Packet Transmission Logic
+        # Transmitted if:
+        #   We didn't have a higher priority packet to send (i.e. we didn't do anything above)
+        #   I have a valid timeslot number (not -1)
+        #   CRC is OK
+        #   Payload type is a telemetry packet
+        #   Payload ID is the same as the defined destination
+        #   Indicated number of in-use timeslots is >= my timeslot number.
+        #   The current uplink timeslot is my timeslot.
+        elif (self.my_uplink_timeslot != -1) and (self.low_priority_destination != -1) and (len(self.low_priority_packet) != 0):
+            print("We have a valid low priority packet.")
+            if (decode_payload_type(rxdata) == HORUS_PACKET_TYPES.PAYLOAD_TELEMETRY) and (decode_payload_id(rxdata) == self.low_priority_destination):
+                print("Packet is Telemetry, and is our destination.")
+                # Decode the telemetry packet.
+                telemetry = decode_horus_payload_telemetry(rxdata)
+                if (telemetry['used_timeslots'] < self.my_uplink_timeslot):
+                    print("My timeslot is greater than the reported number of used timeslots! Did the payload reset?")
+                    # Set my timeslot ID back to -1 to trigger the request-timeslot logic.
+                    self.my_uplink_timeslot = -1
+                elif (telemetry['current_timeslot'] == self.my_uplink_timeslot):
+                    # Sleep, then transmit packet.
+                    time.sleep(LOW_PRIORITY_DELAY)
+                    self.tx_packet(self.low_priority_packet)
+                else:
+                    print("Not my timeslot.")
+            else:
+                print("Not telemetry, or wrong destination.")
+
+        # Otherwise, we ignore the packet.
+        else:
+            pass
 
 
         self.set_mode(MODE.SLEEP)
@@ -430,7 +473,9 @@ class LoRaTxRxCont(LoRa):
                         if 'frequency' in m_data.keys():
                             new_freq = float(m_data['frequency'])
                             self.settings_changes.put_nowait(('frequency',new_freq))
-                            
+                    elif m_data['type'] == 'LOWPRIORITY':
+                        self.low_priority_destination = m_data['destination']
+                        self.low_priority_packet = m_data['payload']
                     else:
                         pass
                 except Exception as e:

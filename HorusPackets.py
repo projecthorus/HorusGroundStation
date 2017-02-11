@@ -10,10 +10,15 @@ from base64 import b64encode
 from hashlib import sha256
 from datetime import datetime
 
+# Network Settings
 HORUS_UDP_PORT = 55672
 HORUS_OZIPLOTTER_PORT = 8942
 MAX_JSON_LEN = 2048
 TX_QUEUE_SIZE = 32
+
+# Timing Settings
+TX_AFTER_RX_DELAY   = 0.3
+LOW_PRIORITY_DELAY  = 3.0
 
 # Packet Payload Types
 class HORUS_PACKET_TYPES:
@@ -76,13 +81,14 @@ def decode_payload_flags(packet):
 # Byte 2 - Destination ID (the payload that will repeat this packet)
 # Byte 3-10 - Callsign (Max 8 chars. Padded to 8 characters if shorter.)
 # Bytes 11-64 - Message (Max 54 characters. Not padded!)
+TEXT_MESSAGE_MAX_LENGTH = 32
 def create_text_message_packet(source="N0CALL", message="CQ CQ CQ", destination=0):
     # Sanitise input
     if len(source)>8:
         source = source[:8]
 
-    if len(message)>53:
-        message = message[:53]
+    if len(message)>TEXT_MESSAGE_MAX_LENGTH:
+        message = message[:TEXT_MESSAGE_MAX_LENGTH]
 
     # Pad data if required.
     if len(source)<8:
@@ -231,6 +237,9 @@ def decode_horus_payload_telemetry(packet):
     telemetry['rxPktCount'] = unpacked[13]
     telemetry['RSSI'] = unpacked[14]-164
     telemetry['telemFlags'] = unpacked[15]
+    # Uplink timeslot stuff.
+    telemetry['used_timeslots'] = (0xF0&unpacked[15])>>4 # High Nibble
+    telemetry['current_timeslot'] = (0x0F & unpacked[15]) # Low Nibble
 
     # Convert some of the fields into more useful units.
     telemetry['time'] = time.strftime("%H:%M:%S", time.gmtime(telemetry['time_biseconds']*2))
@@ -327,6 +336,12 @@ def create_param_change_packet(param = HORUS_PAYLOAD_PARAMS.PING, value = 10, pa
 
     return param_packet
 
+def create_car_telemetry_packet():
+    pass
+
+def decode_car_telemetry_packet():
+    pass
+
 # Transmit packet via UDP Broadcast
 def tx_packet(payload, blocking=False, timeout=4, destination=None, tx_timeout=15):
     packet = {
@@ -354,7 +369,8 @@ def tx_packet(payload, blocking=False, timeout=4, destination=None, tx_timeout=1
     s.bind(('',HORUS_UDP_PORT))
     try:
         s.sendto(json.dumps(packet), ('<broadcast>', HORUS_UDP_PORT))
-    except socket.error:
+    except socket.error as e:
+        print(str(e))
         s.sendto(json.dumps(packet), ('127.0.0.1', HORUS_UDP_PORT))
 
     if blocking:
