@@ -28,6 +28,8 @@ class HORUS_PACKET_TYPES:
     PARAMETER_CHANGE      = 3
     COMMAND_ACK           = 4
     SHORT_TELEMETRY       = 5
+    SLOT_REQUEST          = 6
+    CAR_TELEMETRY         = 7
     # Accept SSDV packets 'as-is'. https://ukhas.org.uk/guides:ssdv
     SSDV_FEC              = 0x66
     SSDV_NOFEC            = 0x67
@@ -76,7 +78,7 @@ def decode_payload_flags(packet):
 
 # TEXT MESSAGE PACKET
 # Payload Format:
-# Byte 0 - Payload ID
+# Byte 0 - Packet Type ID
 # Byte 1 - Payload Flags
 # Byte 2 - Destination ID (the payload that will repeat this packet)
 # Byte 3-10 - Callsign (Max 8 chars. Padded to 8 characters if shorter.)
@@ -325,7 +327,6 @@ def create_param_change_packet(param = HORUS_PAYLOAD_PARAMS.PING, value = 10, pa
 
     # TODO: Sanitise destination field input.
 
-
     param_packet = [HORUS_PACKET_TYPES.PARAMETER_CHANGE,0,0,0,0,0,0,0]
     param_packet[2] = destination
     param_packet[3] = ord(passcode[0])
@@ -336,11 +337,136 @@ def create_param_change_packet(param = HORUS_PAYLOAD_PARAMS.PING, value = 10, pa
 
     return param_packet
 
-def create_car_telemetry_packet():
-    pass
+CAR_TELEMETRY_CALLSIGN_LENGTH = 9
+CAR_TELEMETRY_MESSAGE_LENGTH = 20
+def create_car_telemetry_packet(destination=0,callsign="N0CALL", latitude=-34.5, longitude=138.0, speed=1, message=" "):
+    # Sanitise Inputs
 
-def decode_car_telemetry_packet():
-    pass
+    # Convert speed to an integer, and clip to 0 - 110 kph.
+    speed = int(speed)
+    if speed > 110:
+        speed = 110
+    elif speed < 0:
+        speed = 0
+    else:
+        pass
+
+    if len(message) > CAR_TELEMETRY_MESSAGE_LENGTH:
+        message = message[:CAR_TELEMETRY_MESSAGE_LENGTH]
+    elif len(message) == 0:
+        message = " "
+    else:
+        pass
+
+    telem_packet = struct.pack(">BBB9sffB",
+        HORUS_PACKET_TYPES.CAR_TELEMETRY,
+        0,
+        destination,
+        callsign,
+        latitude,
+        longitude,
+        speed)
+
+    # Add on capped-length message field at end.
+    telem_packet += message
+
+    return telem_packet
+
+CAR_TELEMETRY_BODY_LENGTH = 21
+def decode_car_telemetry_packet(packet):
+    packet = str(bytearray(packet))
+
+    if len(packet) < (CAR_TELEMETRY_BODY_LENGTH+1):
+        print("Wrong string length")
+        return {}
+
+    if decode_payload_type(packet) != HORUS_PACKET_TYPES.CAR_TELEMETRY:
+        print("Not a Car Telemetry Packet")
+        return {}
+
+    try:
+        unpacked = struct.unpack(">BBB9sffB", packet[:CAR_TELEMETRY_BODY_LENGTH])
+    except:
+        print("Wrong string length. Packet contents:")
+        print(":".join("{:02x}".format(ord(c)) for c in packet))
+        return {}
+
+    car_telem = {}
+    car_telem['packet_type']    = unpacked[0]
+    car_telem['payload_flags']  = unpacked[1]
+    car_telem['source_id']      = unpacked[2]
+    car_telem['callsign']       = unpacked[3].rstrip(' \t\r\n\0')
+    car_telem['latitude']       = unpacked[4]
+    car_telem['longitude']      = unpacked[5]
+    car_telem['speed']          = unpacked[6]
+    car_telem['message']        = packet[CAR_TELEMETRY_BODY_LENGTH:].rstrip('\t\r\n\0')
+
+    return car_telem
+
+def car_telem_to_string(packet):
+    car_telem = decode_car_telemetry_packet(packet)
+
+    car_telem_string = ""
+
+    if len(car_telem.keys()) == 0:
+        car_telem_string =  "Car Telemetry: Invalid Packet"
+    else:
+        if decode_payload_flags(packet)['is_repeated']:
+            car_telem_string =  "Car Telemetry (via #%d): " % (car_telem['source_id'])
+        else:
+            car_telem_string = "Car Telemetry (direct): "
+
+        car_telem_string += "%s %.5f,%.5f %d kph [%s]" % (car_telem['callsign'],car_telem['latitude'],car_telem['longitude'],car_telem['speed'],car_telem['message'])
+
+    return car_telem_string
+
+
+def create_slot_request_packet(destination=0,callsign="N0CALL"):
+    telem_packet = struct.pack(">BBB9sB",
+        HORUS_PACKET_TYPES.SLOT_REQUEST,
+        0,
+        destination,
+        callsign,
+        0)
+
+    return telem_packet
+
+def decode_slot_request_packet(packet):
+    packet = str(bytearray(packet))
+
+    if decode_payload_type(packet) != HORUS_PACKET_TYPES.SLOT_REQUEST:
+        print("Not a Slot Request Packet")
+        return {}
+
+    try:
+        unpacked = struct.unpack(">BBB9sB", packet)
+    except:
+        print("Wrong string length. Packet contents:")
+        print(":".join("{:02x}".format(ord(c)) for c in packet))
+        return {}
+
+    slot_request = {}
+    slot_request['packet_type']    = unpacked[0]
+    slot_request['payload_flags']  = unpacked[1]
+    slot_request['source_id']      = unpacked[2]
+    slot_request['callsign']       = unpacked[3].rstrip(' \t\r\n\0')
+    slot_request['slot_id']        = unpacked[4]
+    slot_request['is_response']    = slot_request['slot_id'] != 0
+
+    return slot_request
+
+def slot_request_to_string(packet):
+    slot_request = decode_slot_request_packet(packet)
+    # Sanity check we were able to decode the packet.
+    if len(slot_request.keys()) == 0:
+        return "Slot Request: Invalid Packet"
+    else:
+        if slot_request['slot_id'] == 0:
+            return "Slot Request: %s requested a slot from #%d" % (slot_request['callsign'],slot_request['source_id'])
+        else:
+            return "Slot Response: %s was given slot ID %d from #%d" % (slot_request['callsign'],slot_request['slot_id'],slot_request['source_id'])
+
+
 
 # Transmit packet via UDP Broadcast
 def tx_packet(payload, blocking=False, timeout=4, destination=None, tx_timeout=15):
@@ -354,8 +480,8 @@ def tx_packet(payload, blocking=False, timeout=4, destination=None, tx_timeout=1
         packet['timeout'] = tx_timeout
 
     # Print some info about the packet.
-    print packet
-    print len(json.dumps(packet))
+    print(packet)
+    print(len(json.dumps(packet)))
     # Set up our UDP socket
     s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
     s.settimeout(1)
@@ -460,7 +586,10 @@ def payload_to_string(packet):
         return "Parameter Change"
     elif (payload_type == HORUS_PACKET_TYPES.SSDV_FEC) or (payload_type == HORUS_PACKET_TYPES.SSDV_NOFEC):
         return read_ssdv_packet_info(packet)
-
+    elif payload_type == HORUS_PACKET_TYPES.SLOT_REQUEST:
+        return slot_request_to_string(packet)
+    elif payload_type == HORUS_PACKET_TYPES.CAR_TELEMETRY:
+        return car_telem_to_string(packet)
     else:
         return "Unknown Payload"
 
@@ -487,8 +616,10 @@ def udp_packet_to_string(udp_packet):
         rssi = float(udp_packet['rssi'])
         txqueuesize = udp_packet['txqueuesize']
         frequency = udp_packet['frequency']
+        uplink_callsign = udp_packet['uplink_callsign']
+        uplink_slot_id = udp_packet['uplink_slot_id']
         # Insert Modem Status decoding code here.
-        return "%s STATUS \t%.3f MHz \tRSSI: %.1f \tQUEUE: %d" % (timestamp,frequency,rssi,txqueuesize)
+        return "%s STATUS \t%.3f MHz \tRSSI: %.1f \tUplink Slot: %d" % (timestamp,frequency,rssi,uplink_slot_id)
     elif pkt_type == "TXPKT":
         timestamp = datetime.utcnow().isoformat()
         payload_str = payload_to_string(udp_packet['payload'])

@@ -72,7 +72,10 @@
 #       'timestamp : '<ISO-8601 formatted timestamp>',
 #       'rssi' : <Current RSSI in dB>,
 #       'status': {<Current Modem Status, straight from pySX127x's get_modem_status()},
-#       'frequency': <Current RX frequency>
+#       'frequency': <Current RX frequency>,
+#       'uplink_callsign': <Callsign used for low priority uplink>
+#       'uplink_slot_id': <Current uplink slot ID>
+#       'uplink_destination': <Current uplink destination ID>
 #   }
 #
 #   RX DATA PACKET
@@ -111,8 +114,20 @@
 #       'frequency' : <New operating frequency, in MHz.>
 #   }
 #
+#
+#   LOWPRIORITY
+#   Update various parameters used in the low priority uplink system
+#   Note that all fields are optional, and can be updated independently
+#   ------------
+#   {
+#       'callsign'  :   '<Callsign used for uplink slot requests. Max 9 chars.',
+#       'destination': <Payload ID we uplink to>,
+#       'payload':  [<Packet to transmit during the low priority uplink timeslot, as a list of bytes>],
+#       'reset': 'Dummy data - send this field to reset the uplink slot to -1, triggering a request for a new uplink timeslot'
+#
+#
 
-import json,socket,Queue,random, argparse, sys, traceback, time
+import json,socket,Queue,random, argparse, sys, traceback, time, random
 from threading import Thread
 from HorusPackets import *
 from datetime import datetime
@@ -128,6 +143,8 @@ group.add_argument("--spibridge", action="store_true", help="Use a Arduino+LoRa 
 parser.add_argument("-d" ,"--device", default="1", help="Hardware Device, either a serial port (i.e. /dev/ttyUSB0 or COM5) or SPI device number (i.e. 1)")
 parser.add_argument("-f", "--frequency",type=float,default=431.650,help="Operating Frequency (MHz)")
 parser.add_argument("-m", "--mode",type=int,default=0,help="Transmit Mode: 0 = Slow, 1 = Fast, 2 = Really Fast")
+parser.add_argument("--callsign", default="blank", help="OPTIONAL: Callsign used for automatic uplink slot requesting.")
+parser.add_argument("--payload_id", default=-1, help="OPTIONAL: Payload ID to automatically request slot from.")
 args = parser.parse_args()
 
 mode = int(args.mode)
@@ -146,7 +163,7 @@ else:
     sys.exit(1)
 
 class LoRaTxRxCont(LoRa):
-    def __init__(self,hw,verbose=False,max_payload=255,mode=0,frequency=431.650):
+    def __init__(self,hw,verbose=False,max_payload=255,mode=0,frequency=431.650, callsign='blank', low_priority_destination=-1):
         super(LoRaTxRxCont, self).__init__(hw,verbose)
         self.set_mode(MODE.SLEEP)
         self.set_dio_mapping([0] * 6)
@@ -175,7 +192,9 @@ class LoRaTxRxCont(LoRa):
         # Low Priority Packet related variables
         # This data is sent whenever the relevant payload indicates that is is 'our' time to transmit.
         self.my_uplink_timeslot = -1
-        self.low_priority_destination = -1
+        self.slot_request_holdoff = 0
+        self.my_callsign = callsign
+        self.low_priority_destination = low_priority_destination
         self.low_priority_packet = []
 
 
@@ -269,6 +288,7 @@ class LoRaTxRxCont(LoRa):
         #   - CRC is OK
         #   - Payload type is a telemetry packet.
         #   - Payload ID is the same as our destination. 
+
         if (self.tx_after_rx.full()) and (pkt_flags['crc_error'] == 0): # CRC is OK, and we have something we might want to transmit.
             print("Do we want to transmit now?")
             if decode_payload_type(rxdata) == HORUS_PACKET_TYPES.PAYLOAD_TELEMETRY:
@@ -291,8 +311,35 @@ class LoRaTxRxCont(LoRa):
                         self.tx_after_rx.put_nowait((tx_packet,dest_id,timeout))
 
         # Uplink timeslot request logic
-        elif (self.my_uplink_timeslot == -1):
-            # TODO.
+        # Send a timeslot request packet if:
+        #   - My timeslot is -1 (i.e. we don't have a timeslot yet)
+        #   - My callsign is not 'blank' (i.e. a callsign has been set by the user)
+        #   - The received packet is a telemetry packet, from the user-defined destination, and the CRC is OK.
+        #   - The telemetry packet indicates a current slot of 0.
+        #   - The slot_request_holdoff value is 0.
+        #        (If we get this far, and the holdoff value is <0, decrement it)
+
+        elif (self.my_uplink_timeslot == -1) and (pkt_flags['crc_error'] == 0) and (self.my_callsign != 'blank'):
+            if decode_payload_type(rxdata) == HORUS_PACKET_TYPES.PAYLOAD_TELEMETRY:
+                if decode_payload_id(rxdata) == self.low_priority_destination:
+                    # Decode the telemetry packet.
+                    telemetry_packet = decode_horus_payload_telemetry(rxdata)
+                    if telemetry_packet['current_timeslot'] == 0:
+                        if self.slot_request_holdoff == 0:
+                            #  Create and transmit the slot request packet!
+                            slot_request_packet = create_slot_request_packet(destination=self.low_priority_destination, callsign=self.my_callsign)
+                            time.sleep(LOW_PRIORITY_DELAY)
+                            self.tx_packet(slot_request_packet)
+                            # Set the slot request holdoff to 2, so we don't keep on requesting a slot
+                            # if we don't receive a response for some reason.
+                            self.slot_request_holdoff = 2
+                        else:
+                            print("Waiting %d more cycle(s) before requesting a slot." % self.slot_request_holdoff)
+                            self.slot_request_holdoff -= 1
+                    else:
+                        print("Not in uplink slot zero.")
+                else:
+                    print("Not from our destination payload - not sending slot request.")
             pass
 
         # 'Low Priority' Packet Transmission Logic
@@ -304,7 +351,7 @@ class LoRaTxRxCont(LoRa):
         #   Payload ID is the same as the defined destination
         #   Indicated number of in-use timeslots is >= my timeslot number.
         #   The current uplink timeslot is my timeslot.
-        elif (self.my_uplink_timeslot != -1) and (self.low_priority_destination != -1) and (len(self.low_priority_packet) != 0):
+        elif (self.my_uplink_timeslot != -1) and (self.low_priority_destination != -1) and (len(self.low_priority_packet) != 0) and (pkt_flags['crc_error'] == 0):
             print("We have a valid low priority packet.")
             if (decode_payload_type(rxdata) == HORUS_PACKET_TYPES.PAYLOAD_TELEMETRY) and (decode_payload_id(rxdata) == self.low_priority_destination):
                 print("Packet is Telemetry, and is our destination.")
@@ -323,10 +370,27 @@ class LoRaTxRxCont(LoRa):
             else:
                 print("Not telemetry, or wrong destination.")
 
-        # Otherwise, we ignore the packet.
         else:
             pass
 
+        # Peek into the packet (if the CRC is ok) and see if we need to do anything with it.
+        if (pkt_flags['crc_error'] == 0):
+            # Slot request response.
+            if (decode_payload_type(rxdata) == HORUS_PACKET_TYPES.SLOT_REQUEST) and (decode_payload_id(rxdata) == self.low_priority_destination):
+                # Decode and check if it a response to a request from us.
+                slot_response = decode_slot_request_packet(rxdata)
+                if (slot_response['callsign'] == self.my_callsign) and slot_response['is_response']:
+                    # A response to our slot request!
+                    self.my_uplink_timeslot = slot_response['slot_id']
+                    print("Got an uplink timeslot! (%d)" % self.my_uplink_timeslot)
+                else:
+                    print("Not a response for me.")
+                    # If we are still in a state where we are trying to request a slot, and this response wasn't for us
+                    # it suggests that other users are also trying to request a slot.
+                    # Set the backoff value to a random number between 0 and 3 (inclusive), which forces us to wait a few more cycles before
+                    # trying again.
+                    self.slot_request_holdoff = int(random.random()*3)+1
+                
 
         self.set_mode(MODE.SLEEP)
         self.reset_ptr_rx()
@@ -474,8 +538,20 @@ class LoRaTxRxCont(LoRa):
                             new_freq = float(m_data['frequency'])
                             self.settings_changes.put_nowait(('frequency',new_freq))
                     elif m_data['type'] == 'LOWPRIORITY':
-                        self.low_priority_destination = m_data['destination']
-                        self.low_priority_packet = m_data['payload']
+                        # It will probably be useful for the user to be able to update
+                        # a subset of fields at a time, so only try and read a field if it exists.
+                        if 'destination' in m_data.keys():
+                            self.low_priority_destination = int(m_data['destination'])
+
+                        if 'payload' in m_data.keys():
+                            self.low_priority_packet = m_data['payload']
+
+                        if 'callsign' in m_data.keys():
+                            self.my_callsign = m_data['callsign']
+
+                        if 'reset' in m_data.keys():
+                            self.my_uplink_timeslot = -1
+
                     else:
                         pass
                 except Exception as e:
@@ -541,8 +617,10 @@ class LoRaTxRxCont(LoRa):
                     'rssi'  : rssi_value,
                     'status': status,
                     'txqueuesize': self.txqueue.qsize(),
-                    'frequency' : self.frequency
-
+                    'frequency' : self.frequency,
+                    'uplink_callsign'  : self.my_callsign,
+                    'uplink_slot_id' : self.my_uplink_timeslot,
+                    'uplink_destination': self.low_priority_destination
                 }
                 self.udp_broadcast(status_dict)
 
