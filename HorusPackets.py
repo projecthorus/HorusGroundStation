@@ -194,12 +194,12 @@ def decode_short_payload_telemetry(packet):
 # {
 #   uint8_t   PacketType;
 #   uint8_t   PayloadFlags;
-#     uint8_t     PayloadIDs;
-#     uint16_t    Counter;
-#     uint16_t    BiSeconds;
-#     float       Latitude;
-#     float       Longitude;
-#     uint16_t    Altitude;
+#   uint8_t   PayloadIDs;
+#   uint16_t  Counter;
+#   uint16_t  BiSeconds;
+#   float   Latitude;
+#   float   Longitude;
+#   uint16_t    Altitude;
 #   uint8_t   Speed; // Speed in Knots (1-255 knots)
 #   uint8_t   Sats;
 #   uint8_t   Temp; // Twos Complement Temp value.
@@ -207,7 +207,7 @@ def decode_short_payload_telemetry(packet):
 #   uint8_t   PyroVoltage; // 0 = 0v, 255 = 5.0V, linear steps in-between.
 #   uint8_t   rxPktCount; // RX Packet Count.
 #   uint8_t   rxRSSI; // Ambient RSSI value, measured just before transmission.
-#   uint8_t   telemFlags; // Various payload flags, TBD
+#   uint8_t   uplinkSlots; // High Nibble: Uplink timeslots in use; Low Nibble: Current uplink timeslot.
 # };  //  __attribute__ ((packed));
 
 
@@ -238,7 +238,7 @@ def decode_horus_payload_telemetry(packet):
     telemetry['pyro_voltage_raw'] = unpacked[12]
     telemetry['rxPktCount'] = unpacked[13]
     telemetry['RSSI'] = unpacked[14]-164
-    telemetry['telemFlags'] = unpacked[15]
+    telemetry['uplinkSlots'] = unpacked[15]
     # Uplink timeslot stuff.
     telemetry['used_timeslots'] = (0xF0&unpacked[15])>>4 # High Nibble
     telemetry['current_timeslot'] = (0x0F & unpacked[15]) # Low Nibble
@@ -716,7 +716,9 @@ def udp_packet_to_string(udp_packet):
         return "%s ERROR \t%s" % (timestamp,error_str)
     elif pkt_type == "GPS":
         timestamp = datetime.utcnow().isoformat()
-        return "%s Local GPS: <TODO>"
+        return "%s Local GPS: %.4f,%.4f %d kph %d m" % (timestamp,udp_packet['latitude'], udp_packet['longitude'], udp_packet['speed'], udp_packet['altitude'])
+    elif pkt_type == "LOWPRIORITY":
+        return "Low Priority Setting Change"
     else:
         return "Not Implemented"
 

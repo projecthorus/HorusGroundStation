@@ -662,18 +662,19 @@ def process_udp(udp_packet):
 
         elif packet_dict['type'] == 'GPS':
             # Car position update from ChaseTracker.
-            lowpriGPSValue.setText("%.4f,%.4f %d kph" % (packet_dict['latitude'], packet_dict['longitude'], packet_dict['speed']))
-            if lowpriFrameEnabled.isChecked():
-                set_low_priority_payload(create_car_telemetry_packet(
-                    destination=current_payload,
-                    callsign=str(myCallsignValue.text()),
-                    latitude=packet_dict['latitude'],
-                    longitude=packet_dict['longitude'],
-                    speed=packet_dict['speed'],
-                    message=str(lowpriFrameMessage.text())
-                ))
-            else:
-                set_low_priority_payload([])
+            if packet_dict['valid']:
+                lowpriGPSValue.setText("%.4f,%.4f %d kph" % (packet_dict['latitude'], packet_dict['longitude'], packet_dict['speed']))
+                if lowpriFrameEnabled.isChecked():
+                    set_low_priority_payload(create_car_telemetry_packet(
+                        destination=current_payload,
+                        callsign=str(myCallsignValue.text()),
+                        latitude=packet_dict['latitude'],
+                        longitude=packet_dict['longitude'],
+                        speed=packet_dict['speed'],
+                        message=str(lowpriFrameMessage.text())
+                    ))
+                else:
+                    set_low_priority_payload([])
 
 
     except Exception as e:
