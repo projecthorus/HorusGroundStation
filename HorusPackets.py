@@ -17,8 +17,8 @@ MAX_JSON_LEN = 2048
 TX_QUEUE_SIZE = 32
 
 # Timing Settings
-TX_AFTER_RX_DELAY   = 0.3
-LOW_PRIORITY_DELAY  = 3.0
+TX_AFTER_RX_DELAY   = 0.2
+LOW_PRIORITY_DELAY  = 2.35
 
 # Packet Payload Types
 class HORUS_PACKET_TYPES:
@@ -466,7 +466,80 @@ def slot_request_to_string(packet):
         else:
             return "Slot Response: %s was given slot ID %d from #%d" % (slot_request['callsign'],slot_request['slot_id'],slot_request['source_id'])
 
+# Update the LoRaUDPServer with low priority callsign and destination data,
+# so it triggers an uplink slot request.
+def update_low_priority_settings(callsign="blank", destination=-1):
+    packet = {
+        'type' : 'LOWPRIORITY',
+        'callsign': callsign,
+        'destination': destination,
+        'reset': 'reset'
+    }
+    print(packet)
 
+    # Set up our UDP socket
+    s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+    s.settimeout(1)
+    # Set up socket for broadcast, and allow re-use of the address
+    s.setsockopt(socket.SOL_SOCKET,socket.SO_BROADCAST,1)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+    except:
+        pass
+    s.bind(('',HORUS_UDP_PORT))
+    try:
+        s.sendto(json.dumps(packet), ('<broadcast>', HORUS_UDP_PORT))
+    except socket.error:
+        s.sendto(json.dumps(packet), ('127.0.0.1', HORUS_UDP_PORT))
+
+# Resets the uplink slot ID on the ground station, triggering an uplink slot request, if we
+# already had a slot. Otherwise, does nothing.
+def reset_low_priority_slot():
+    packet = {
+        'type' : 'LOWPRIORITY',
+        'reset': 'reset'
+    }
+
+    # Set up our UDP socket
+    s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+    s.settimeout(1)
+    # Set up socket for broadcast, and allow re-use of the address
+    s.setsockopt(socket.SOL_SOCKET,socket.SO_BROADCAST,1)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+    except:
+        pass
+    s.bind(('',HORUS_UDP_PORT))
+    try:
+        s.sendto(json.dumps(packet), ('<broadcast>', HORUS_UDP_PORT))
+    except socket.error:
+        s.sendto(json.dumps(packet), ('127.0.0.1', HORUS_UDP_PORT))
+
+# Updates the payload stored in the low priority packet buffer.
+# This is what is uplinked in the low priority packet slot.
+def set_low_priority_payload(payload):
+    packet = {
+        'type' : 'LOWPRIORITY',
+        'payload': list(bytearray(payload))
+    }
+
+    # Set up our UDP socket
+    s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+    s.settimeout(1)
+    # Set up socket for broadcast, and allow re-use of the address
+    s.setsockopt(socket.SOL_SOCKET,socket.SO_BROADCAST,1)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+    except:
+        pass
+    s.bind(('',HORUS_UDP_PORT))
+    try:
+        s.sendto(json.dumps(packet), ('<broadcast>', HORUS_UDP_PORT))
+    except socket.error:
+        s.sendto(json.dumps(packet), ('127.0.0.1', HORUS_UDP_PORT))
 
 # Transmit packet via UDP Broadcast
 def tx_packet(payload, blocking=False, timeout=4, destination=None, tx_timeout=15):
@@ -553,6 +626,8 @@ def update_frequency(freq=431.650):
     except socket.error:
         s.sendto(json.dumps(packet), ('127.0.0.1', HORUS_UDP_PORT))
 
+
+
 # Produce short string representation of packet payload contents.
 def payload_to_string(packet):
     payload_type = decode_payload_type(packet)
@@ -618,8 +693,9 @@ def udp_packet_to_string(udp_packet):
         frequency = udp_packet['frequency']
         uplink_callsign = udp_packet['uplink_callsign']
         uplink_slot_id = udp_packet['uplink_slot_id']
+        uplink_holdoff = udp_packet['uplink_holdoff']
         # Insert Modem Status decoding code here.
-        return "%s STATUS \t%.3f MHz \tRSSI: %.1f \tUplink Slot: %d" % (timestamp,frequency,rssi,uplink_slot_id)
+        return "%s STATUS \t%.3f MHz \tRSSI: %.1f \tUplink: %s, Slot %d, Holdoff: %d" % (timestamp,frequency,rssi,uplink_callsign, uplink_slot_id, uplink_holdoff)
     elif pkt_type == "TXPKT":
         timestamp = datetime.utcnow().isoformat()
         payload_str = payload_to_string(udp_packet['payload'])
@@ -638,6 +714,9 @@ def udp_packet_to_string(udp_packet):
         timestamp = datetime.utcnow().isoformat()
         error_str = udp_packet['str']
         return "%s ERROR \t%s" % (timestamp,error_str)
+    elif pkt_type == "GPS":
+        timestamp = datetime.utcnow().isoformat()
+        return "%s Local GPS: <TODO>"
     else:
         return "Not Implemented"
 

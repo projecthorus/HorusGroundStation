@@ -144,12 +144,13 @@ parser.add_argument("-d" ,"--device", default="1", help="Hardware Device, either
 parser.add_argument("-f", "--frequency",type=float,default=431.650,help="Operating Frequency (MHz)")
 parser.add_argument("-m", "--mode",type=int,default=0,help="Transmit Mode: 0 = Slow, 1 = Fast, 2 = Really Fast")
 parser.add_argument("--callsign", default="blank", help="OPTIONAL: Callsign used for automatic uplink slot requesting.")
-parser.add_argument("--payload_id", default=-1, help="OPTIONAL: Payload ID to automatically request slot from.")
+parser.add_argument("--payload_id", default=-1, type=int, help="OPTIONAL: Payload ID to automatically request slot from.")
 args = parser.parse_args()
 
 mode = int(args.mode)
 frequency = float(args.frequency)
-
+my_callsign = args.callsign
+payload_id = args.payload_id
 
 # Choose hardware interface
 if args.spibridge:
@@ -547,10 +548,15 @@ class LoRaTxRxCont(LoRa):
                             self.low_priority_packet = m_data['payload']
 
                         if 'callsign' in m_data.keys():
-                            self.my_callsign = m_data['callsign']
+                            self.my_callsign = str(m_data['callsign'])
 
                         if 'reset' in m_data.keys():
+                            # A client including this field triggers a re-request for a timeslot.
+                            # Since this is likely to be used mid-flight, we consider it safe to 
+                            # attempt to request a slot at the next opportunity, hence we set the holdoff
+                            # value to 0.
                             self.my_uplink_timeslot = -1
+                            self.slot_request_holdoff = 0
 
                     else:
                         pass
@@ -620,7 +626,8 @@ class LoRaTxRxCont(LoRa):
                     'frequency' : self.frequency,
                     'uplink_callsign'  : self.my_callsign,
                     'uplink_slot_id' : self.my_uplink_timeslot,
-                    'uplink_destination': self.low_priority_destination
+                    'uplink_destination': self.low_priority_destination,
+                    'uplink_holdoff': self.slot_request_holdoff
                 }
                 self.udp_broadcast(status_dict)
 
@@ -649,7 +656,7 @@ class LoRaTxRxCont(LoRa):
 
 
 
-lora = LoRaTxRxCont(hw,verbose=False,mode=mode,frequency=frequency)
+lora = LoRaTxRxCont(hw,verbose=False,mode=mode,frequency=frequency, callsign=my_callsign, low_priority_destination=payload_id)
 #lora.set_pa_config(max_power=0, output_power=0)
 
 #print(lora)

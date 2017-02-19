@@ -41,13 +41,11 @@ lasttime = 0.0
 # PACKET SNIFFER WIDGET
 # Displays a running log of all UDP traffic.
 packetSnifferFrame = QtGui.QFrame()
-packetSnifferFrame.setFixedSize(800,150)
+packetSnifferFrame.setFixedSize(800,190)
 packetSnifferFrame.setFrameStyle(QtGui.QFrame.Box)
-packetSnifferTitle = QtGui.QLabel("<b><u>Log</u></b>")
 console = QtGui.QPlainTextEdit()
 console.setReadOnly(True)
 packetSnifferLayout = QtGui.QGridLayout()
-packetSnifferLayout.addWidget(packetSnifferTitle)
 packetSnifferLayout.addWidget(console)
 packetSnifferFrame.setLayout(packetSnifferLayout)
 
@@ -61,13 +59,18 @@ payloadSelectionLabel = QtGui.QLabel("<b>Current:</b>")
 payloadSelectionValue = QtGui.QLabel("%d" % current_payload)
 payloadSelectionListLabel = QtGui.QLabel("<b>Heard Payloads:</b>")
 payloadSelectionList = QtGui.QListWidget()
+myCallsignLabel = QtGui.QLabel("<b><u>My Callsign</u></b>")
+myCallsignValue = QtGui.QLineEdit("N0CALL")
+myCallsignValue.setMaxLength(9)
 
 payloadSelectionLayout = QtGui.QGridLayout()
 payloadSelectionLayout.addWidget(payloadSelectionTitle,0,0,1,2)
 payloadSelectionLayout.addWidget(payloadSelectionLabel,1,0,1,1)
 payloadSelectionLayout.addWidget(payloadSelectionValue,1,1,1,1)
 payloadSelectionLayout.addWidget(payloadSelectionListLabel,2,0,1,2)
-payloadSelectionLayout.addWidget(payloadSelectionList,3,0,2,2)
+payloadSelectionLayout.addWidget(payloadSelectionList,3,0,1,2)
+payloadSelectionLayout.addWidget(myCallsignLabel,4,0,1,2)
+payloadSelectionLayout.addWidget(myCallsignValue,5,0,1,2)
 payloadSelectionFrame.setLayout(payloadSelectionLayout)
 
 def newSelectedPayload(curr, prev):
@@ -174,6 +177,8 @@ payloadOtherStatusRxPacketsLabel = QtGui.QLabel("<b>RXed Packets:</b>")
 payloadOtherStatusRxPacketsValue = QtGui.QLabel("0")
 payloadOtherStatusRSSILabel = QtGui.QLabel("<b>Noise Floor:</b>")
 payloadOtherStatusRSSIValue = QtGui.QLabel("-000 dBm")
+payloadOtherStatusUplinkLabel = QtGui.QLabel("<b>Uplink Slot:</b>")
+payloadOtherStatusUplinkValue = QtGui.QLabel("0/0")
 
 payloadOtherStatusLayout = QtGui.QGridLayout()
 payloadOtherStatusLayout.addWidget(payloadOtherStatusTitle,0,0,1,2)
@@ -185,6 +190,8 @@ payloadOtherStatusLayout.addWidget(payloadOtherStatusRxPacketsLabel,3,0)
 payloadOtherStatusLayout.addWidget(payloadOtherStatusRxPacketsValue,3,1)
 payloadOtherStatusLayout.addWidget(payloadOtherStatusRSSILabel,4,0)
 payloadOtherStatusLayout.addWidget(payloadOtherStatusRSSIValue,4,1)
+payloadOtherStatusLayout.addWidget(payloadOtherStatusUplinkLabel,5,0)
+payloadOtherStatusLayout.addWidget(payloadOtherStatusUplinkValue,5,1)
 
 payloadOtherStatusFrame.setLayout(payloadOtherStatusLayout)
 
@@ -336,7 +343,7 @@ cutdownResponseLayout.addWidget(cutdownResponseParamValue,3,3,1,1)
 cutdownResponseFrame.setLayout(cutdownResponseLayout)
 
 uploadFrame = QtGui.QFrame()
-uploadFrame.setFixedSize(400,150)
+uploadFrame.setFixedSize(200,190)
 uploadFrame.setFrameStyle(QtGui.QFrame.Box)
 uploadFrame.setLineWidth(1)
 uploadFrameTitle = QtGui.QLabel("<b><u>Habitat/APRS Upload</u></b>")
@@ -344,30 +351,64 @@ uploadFrameTitle = QtGui.QLabel("<b><u>Habitat/APRS Upload</u></b>")
 uploadFrameHabitat = QtGui.QCheckBox("Habitat Upload")
 uploadFrameHabitat.setChecked(False)
 uploadFrameHabitatTitle = QtGui.QLabel("Last Upload: ")
-uploadFrameAPRS = QtGui.QCheckBox("APRS Upload")
-uploadFrameAPRS.setChecked(False)
 uploadFrameOziPlotter = QtGui.QCheckBox("OziPlotter Upload")
 uploadFrameOziPlotter.setChecked(True)
 uploadFrameFoxTrot = QtGui.QCheckBox("FoxTrotGPS Update")
 uploadFrameFoxTrot.setChecked(True)
-uploadFrameCallsign = QtGui.QLineEdit("N0CALL")
-uploadFrameCallsign.setMaxLength(10)
 
 uploadFrameLayout = QtGui.QGridLayout()
 uploadFrameLayout.addWidget(uploadFrameTitle,0,0,1,1)
-uploadFrameLayout.addWidget(uploadFrameCallsign,0,2,1,2)
 uploadFrameLayout.addWidget(uploadFrameHabitat,1,0,1,1)
-uploadFrameLayout.addWidget(uploadFrameHabitatTitle,1,1,1,2)
-uploadFrameLayout.addWidget(uploadFrameAPRS,3,0,1,1)
-uploadFrameLayout.addWidget(uploadFrameOziPlotter,4,0,1,1)
-uploadFrameLayout.addWidget(uploadFrameFoxTrot,5,0,1,1)
+uploadFrameLayout.addWidget(uploadFrameHabitatTitle,2,0,1,1)
+uploadFrameLayout.addWidget(uploadFrameOziPlotter,3,0,1,1)
+uploadFrameLayout.addWidget(uploadFrameFoxTrot,4,0,1,1)
 
 uploadFrame.setLayout(uploadFrameLayout)
+
+lowpriFrame = QtGui.QFrame()
+lowpriFrame.setFixedSize(200,190)
+lowpriFrame.setFrameStyle(QtGui.QFrame.Box)
+lowpriFrame.setLineWidth(1)
+lowpriFrameTitle = QtGui.QLabel("<b><u>Low-Rate Uplink</u></b>")
+lowpriFrameEnabled = QtGui.QCheckBox("Enable Car Telemetry")
+lowpriFrameEnabled.setChecked(False)
+lowpriFrameSlotLabel = QtGui.QLabel("<b>My Slot:</b>")
+lowpriFrameSlotValue = QtGui.QLabel("None")
+lowpriRequestButton = QtGui.QPushButton("Request")
+lowpriResetButton = QtGui.QPushButton("Reset")
+lowpriGPSLabel = QtGui.QLabel("<b>My Position</b>")
+lowpriGPSValue = QtGui.QLabel("0.0,0.0 0 kph")
+lowpriFrameMessage = QtGui.QLineEdit("QRZ?")
+lowpriFrameMessage.setMaxLength(CAR_TELEMETRY_MESSAGE_LENGTH)
+
+lowpriFrameLayout = QtGui.QGridLayout()
+lowpriFrameLayout.addWidget(lowpriFrameTitle,0,0,1,2)
+lowpriFrameLayout.addWidget(lowpriFrameEnabled,1,0,1,2)
+lowpriFrameLayout.addWidget(lowpriFrameSlotLabel,2,0,1,1)
+lowpriFrameLayout.addWidget(lowpriFrameSlotValue,2,1,1,1)
+lowpriFrameLayout.addWidget(lowpriRequestButton,3,0,1,1)
+lowpriFrameLayout.addWidget(lowpriResetButton,3,1,1,1)
+lowpriFrameLayout.addWidget(lowpriGPSLabel,4,0,1,1)
+lowpriFrameLayout.addWidget(lowpriGPSValue,5,0,1,2)
+lowpriFrameLayout.addWidget(lowpriFrameMessage,6,0,1,2)
+
+lowpriFrame.setLayout(lowpriFrameLayout)
+
+# Helper functions for the low priority uplink stuff.
+
+# Update the ground station software with the user defined callsign/payload id, which will
+# trigger the groundstation to request a slot.
+def request_slot():
+    update_low_priority_settings(callsign=str(myCallsignValue.text()), destination=current_payload)
+
+lowpriRequestButton.clicked.connect(request_slot)
+lowpriResetButton.clicked.connect(reset_low_priority_slot)
+
 
 def habitat_upload(telemetry):
     sentence = telemetry_to_sentence(telemetry, payload_id=telemetry['payload_id'])
     timestamp = datetime.utcnow().isoformat()
-    (success,error) = habitat_upload_payload_telemetry(telemetry,callsign=str(uploadFrameCallsign.text()))
+    (success,error) = habitat_upload_payload_telemetry(telemetry,callsign=str(myCallsignValue.text()))
     if success:
         uploadFrameHabitatTitle.setText("Last Upload: %s" % datetime.utcnow().strftime("%H:%M:%S"))
         console.appendPlainText("%s Habitat Upload: %s" % (timestamp, sentence))
@@ -395,7 +436,7 @@ try:
     config = ConfigParser.ConfigParser()
     config.read('defaults.cfg')
     callsign = config.get('User','callsign')
-    uploadFrameCallsign.setText(callsign)
+    myCallsignValue.setText(callsign)
     password = config.get('User','password')
     cutdownParameterPassword.setText(password)
 except:
@@ -426,6 +467,7 @@ layout.addWidget(cutdownResponseFrame,1,4,1,2)
 
 layout.addWidget(packetSnifferFrame,2,0,1,4)
 layout.addWidget(uploadFrame,2,4,1,1)
+layout.addWidget(lowpriFrame,2,5,1,1)
 
 mainwin = QtGui.QMainWindow()
 
@@ -559,6 +601,7 @@ def processPacket(packet):
         payloadOtherStatusPyroValue.setText("%.2f V" % telemetry['pyro_voltage'])
         payloadOtherStatusRxPacketsValue.setText("%d" % telemetry['rxPktCount'])
         payloadOtherStatusRSSIValue.setText("%d dBm" % telemetry['RSSI'])
+        payloadOtherStatusUplinkValue.setText("%d/%d" % (telemetry['current_timeslot'],telemetry['used_timeslots']))
 
         # Calculate Speed
         calculated_speed = speed_calc(lastlat,lastlon,telemetry['latitude'],telemetry['longitude'],telemetry['time_biseconds']*2 - lasttime)
@@ -588,17 +631,50 @@ def processPacket(packet):
         cutdownResponseTypeValue.setText(command_ack['command'])
         cutdownResponseParamValue.setText(command_ack['argument'])
 
+    elif payload_type == HORUS_PACKET_TYPES.SLOT_REQUEST:
+        lastPacketTypeValue.setText("Slot Request")
+
+    elif payload_type == HORUS_PACKET_TYPES.CAR_TELEMETRY:
+        lastPacketTypeValue.setText("Car Telem")
+
 
 
 def process_udp(udp_packet):
     try:
         packet_dict = json.loads(udp_packet)
         
-        new_data = udp_packet_to_string(packet_dict)
-        console.appendPlainText(new_data)
+        if packet_dict['type'] not in ['GPS','LOWPRIORITY']:
+            # Avoid flooding the terminal with Local GPS data
+            new_data = udp_packet_to_string(packet_dict)
+            console.appendPlainText(new_data)
 
         if packet_dict['type'] == 'RXPKT':
+            # The LoRa Ground station has received a packet.
             processPacket(packet_dict)
+
+        elif packet_dict['type'] == 'STATUS':
+            # A status update from the LoRa Ground Station.
+            # Process and display some values.
+            if packet_dict['uplink_slot_id'] == -1:
+                lowpriFrameSlotValue.setText("None")
+            else:
+                lowpriFrameSlotValue.setText("%d" % packet_dict['uplink_slot_id'])
+
+        elif packet_dict['type'] == 'GPS':
+            # Car position update from ChaseTracker.
+            lowpriGPSValue.setText("%.4f,%.4f %d kph" % (packet_dict['latitude'], packet_dict['longitude'], packet_dict['speed']))
+            if lowpriFrameEnabled.isChecked():
+                set_low_priority_payload(create_car_telemetry_packet(
+                    destination=current_payload,
+                    callsign=str(myCallsignValue.text()),
+                    latitude=packet_dict['latitude'],
+                    longitude=packet_dict['longitude'],
+                    speed=packet_dict['speed'],
+                    message=str(lowpriFrameMessage.text())
+                ))
+            else:
+                set_low_priority_payload([])
+
 
     except Exception as e:
         print(udp_packet)
