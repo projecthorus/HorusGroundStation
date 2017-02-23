@@ -718,7 +718,13 @@ def udp_packet_to_string(udp_packet):
         timestamp = datetime.utcnow().isoformat()
         return "%s Local GPS: %.4f,%.4f %d kph %d m" % (timestamp,udp_packet['latitude'], udp_packet['longitude'], udp_packet['speed'], udp_packet['altitude'])
     elif pkt_type == "LOWPRIORITY":
-        return "Low Priority Setting Change"
+        if 'payload' in udp_packet.keys():
+            if udp_packet['payload'] == []:
+                return "Low Priority Packet Update: TX Inhibited."
+            else:
+                return "Low Priority Packet Update: %s" % payload_to_string(udp_packet['payload'])
+        else:
+            return "Low Priority Setting Change"
     else:
         return "Not Implemented"
 

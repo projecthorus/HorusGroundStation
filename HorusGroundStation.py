@@ -673,6 +673,7 @@ def process_udp(udp_packet):
                         speed=packet_dict['speed'],
                         message=str(lowpriFrameMessage.text())
                     ))
+                    print("foo")
                 else:
                     set_low_priority_payload([])
 

@@ -44,6 +44,9 @@ gpsStatusLabel.setWordWrap(True)
 habitatStatusLabel = QtGui.QLabel("No Data Yet...")
 habitatStatusLabel.setWordWrap(True)
 
+uploadEnabled = QtGui.QCheckBox("Enable Upload")
+uploadEnabled.setChecked(True)
+
 # Create and Lay-out window
 win = QtGui.QWidget()
 win.resize(500,100)
@@ -52,9 +55,10 @@ win.setWindowTitle("ChaseTracker - %s" % callsign)
 layout = QtGui.QGridLayout()
 win.setLayout(layout)
 # Add Widgets
-layout.addWidget(currentPositionLabel,0,0)
-layout.addWidget(gpsStatusLabel,1,0)
-layout.addWidget(habitatStatusLabel,2,0)
+layout.addWidget(currentPositionLabel,0,0,1,1)
+layout.addWidget(uploadEnabled,0,1,1,1)
+layout.addWidget(gpsStatusLabel,1,0,1,2)
+layout.addWidget(habitatStatusLabel,2,0,1,2)
 
 
 def updateGui():
@@ -254,7 +258,8 @@ def uploadPosition():
 def uploadTimer():
     if position_valid:
         try:
-            uploadPosition()
+            if uploadEnabled.isChecked():
+                uploadPosition()
         except:
             pass
 
