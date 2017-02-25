@@ -45,8 +45,11 @@ packetSnifferFrame.setFixedSize(800,190)
 packetSnifferFrame.setFrameStyle(QtGui.QFrame.Box)
 console = QtGui.QPlainTextEdit()
 console.setReadOnly(True)
+consoleInhibitStatus = QtGui.QCheckBox("Inhibit Status Messages")
+consoleInhibitStatus.setChecked(False)
 packetSnifferLayout = QtGui.QGridLayout()
-packetSnifferLayout.addWidget(console)
+packetSnifferLayout.addWidget(consoleInhibitStatus,0,0)
+packetSnifferLayout.addWidget(console,1,0)
 packetSnifferFrame.setLayout(packetSnifferLayout)
 
 # PAYLOAD SELECTION WIDGET
@@ -210,6 +213,7 @@ cutdownCommandValue.addItem("Cutdown")
 cutdownCommandValue.addItem("Update Rate")
 cutdownCommandValue.addItem("Set Payload ID")
 cutdownCommandValue.addItem("Set Num Payloads")
+cutdownCommandValue.addItem("Reset Uplink Slots")
 cutdownParameterLabel = QtGui.QLabel("<b>Value</b>")
 cutdownParameterValue = QtGui.QLineEdit("4")
 cutdownParameterPasswordLabel = QtGui.QLabel("<b>Password</b>")
@@ -244,6 +248,9 @@ def cutdownCommandChanged(text):
         cutdownParameterValue.setText("%d"%(current_payload+1))
     elif text == "Set Num Payloads":
         cutdownParameterValue.setText("%d"%(current_payload+1))
+    elif text == "Reset Uplink Slots":
+        uplink_value = random.randrange(0,255)
+        cutdownParameterValue.setText("%d"%uplink_value)
     else:
         pass
 
@@ -305,6 +312,19 @@ def cutdownButtonPressed():
 
         param_packet = create_param_change_packet(param = HORUS_PAYLOAD_PARAMS.NUM_PAYLOADS, value = uplink_value, passcode = cutdown_password, destination = current_payload)
         tx_packet(param_packet, destination = current_payload)
+    elif str(cutdownCommandValue.currentText()) == "Reset Uplink Slots":
+
+        msgBox = QtGui.QMessageBox()
+        msgBox.setText("Are you sure you want to reset Payload #%d's Uplink Slots?" % (current_payload))
+        msgBox.setStandardButtons(QtGui.QMessageBox.Yes | QtGui.QMessageBox.No)
+        msgBox.setDefaultButton(QtGui.QMessageBox.No)
+        reply = msgBox.exec_()
+        if reply == QtGui.QMessageBox.No:
+            return
+
+        param_packet = create_param_change_packet(param = HORUS_PAYLOAD_PARAMS.RESET_SLOTS, value = uplink_value, passcode = cutdown_password, destination = current_payload)
+        tx_packet(param_packet, destination = current_payload)
+
     else:
         pass
 cutdownButton.clicked.connect(cutdownButtonPressed)
@@ -351,8 +371,10 @@ uploadFrameTitle = QtGui.QLabel("<b><u>Habitat/APRS Upload</u></b>")
 uploadFrameHabitat = QtGui.QCheckBox("Habitat Upload")
 uploadFrameHabitat.setChecked(False)
 uploadFrameHabitatTitle = QtGui.QLabel("Last Upload: ")
-uploadFrameOziPlotter = QtGui.QCheckBox("OziPlotter Upload")
+uploadFrameOziPlotter = QtGui.QCheckBox("Push Telem to Ozi")
 uploadFrameOziPlotter.setChecked(True)
+uploadFrameOziPlotterCars = QtGui.QCheckBox("Push Cars to Ozi")
+uploadFrameOziPlotterCars.setChecked(True)
 uploadFrameFoxTrot = QtGui.QCheckBox("FoxTrotGPS Update")
 uploadFrameFoxTrot.setChecked(True)
 
@@ -361,7 +383,8 @@ uploadFrameLayout.addWidget(uploadFrameTitle,0,0,1,1)
 uploadFrameLayout.addWidget(uploadFrameHabitat,1,0,1,1)
 uploadFrameLayout.addWidget(uploadFrameHabitatTitle,2,0,1,1)
 uploadFrameLayout.addWidget(uploadFrameOziPlotter,3,0,1,1)
-uploadFrameLayout.addWidget(uploadFrameFoxTrot,4,0,1,1)
+uploadFrameLayout.addWidget(uploadFrameOziPlotterCars,4,0,1,1)
+uploadFrameLayout.addWidget(uploadFrameFoxTrot,5,0,1,1)
 
 uploadFrame.setLayout(uploadFrameLayout)
 
@@ -643,10 +666,14 @@ def process_udp(udp_packet):
     try:
         packet_dict = json.loads(udp_packet)
         
+
         if packet_dict['type'] not in ['GPS','LOWPRIORITY']:
             # Avoid flooding the terminal with Local GPS data
-            new_data = udp_packet_to_string(packet_dict)
-            console.appendPlainText(new_data)
+            if (packet_dict['type'] == 'STATUS') and consoleInhibitStatus.isChecked():
+                pass
+            else:
+                new_data = udp_packet_to_string(packet_dict)
+                console.appendPlainText(new_data)
 
         if packet_dict['type'] == 'RXPKT':
             # The LoRa Ground station has received a packet.
@@ -673,7 +700,6 @@ def process_udp(udp_packet):
                         speed=packet_dict['speed'],
                         message=str(lowpriFrameMessage.text())
                     ))
-                    print("foo")
                 else:
                     set_low_priority_payload([])
 

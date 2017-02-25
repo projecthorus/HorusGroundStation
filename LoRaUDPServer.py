@@ -282,6 +282,12 @@ class LoRaTxRxCont(LoRa):
         rxdata = self.read_payload(nocheck=True)
         print("RX Packet!")
 
+        self.set_mode(MODE.SLEEP)
+        self.reset_ptr_rx()
+        self.BOARD.led_off()
+        # Go back into RX mode.
+        self.set_rx_mode()
+
         self.udp_send_rx(rxdata,snr,rssi,pkt_flags,freq_error)
 
         # TX-After-RX Logic.
@@ -391,13 +397,7 @@ class LoRaTxRxCont(LoRa):
                     # Set the backoff value to a random number between 0 and 3 (inclusive), which forces us to wait a few more cycles before
                     # trying again.
                     self.slot_request_holdoff = int(random.random()*3)+1
-                
-
-        self.set_mode(MODE.SLEEP)
-        self.reset_ptr_rx()
-        self.BOARD.led_off()
-        # Go back into RX mode.
-        self.set_rx_mode()
+            
 
     def on_tx_done(self):
         print("\nTxDone")

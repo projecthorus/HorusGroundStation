@@ -41,6 +41,7 @@ class HORUS_PAYLOAD_PARAMS:
     TDMA_SLOT             = 3 # Currently unused
     PAYLOAD_ID            = 4
     NUM_PAYLOADS          = 5
+    RESET_SLOTS           = 6
 
 
 
