@@ -786,7 +786,7 @@ def oziplotter_upload_basic_telemetry(telemetry,hostname="127.0.0.1"):
         print("Failed to send to Ozi: " % e)
 
 def oziplotter_upload_car_telemetry(car_telem, hostname="127.0.0.1"):
-    sentence = "WAYPOINT,%d,%.5f,%.5f,%s\n" % (car_telem['callsign'], car_telem['latitude'], car_telem['longitude'], car_telem['message'])
+    sentence = "WAYPOINT,%s,%.5f,%.5f,%s\n" % (car_telem['callsign'], car_telem['latitude'], car_telem['longitude'], car_telem['message'])
 
     try:
         ozisock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)

@@ -663,7 +663,9 @@ def processPacket(packet):
         car_telem = decode_car_telemetry_packet(payload)
 
         if uploadFrameOziPlotterCars.isChecked():
-            oziplotter_upload_car_telemetry(car_telem)
+            # Don't plot your own position. OziExplorer handles that just fine.
+            if car_telem['callsign'] != str(myCallsignValue.text()):
+                oziplotter_upload_car_telemetry(car_telem)
 
 
 
