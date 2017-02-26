@@ -374,7 +374,7 @@ uploadFrameHabitatTitle = QtGui.QLabel("Last Upload: ")
 uploadFrameOziPlotter = QtGui.QCheckBox("Push Telem to Ozi")
 uploadFrameOziPlotter.setChecked(True)
 uploadFrameOziPlotterCars = QtGui.QCheckBox("Push Cars to Ozi")
-uploadFrameOziPlotterCars.setChecked(False)
+uploadFrameOziPlotterCars.setChecked(True)
 uploadFrameFoxTrot = QtGui.QCheckBox("FoxTrotGPS Update")
 uploadFrameFoxTrot.setChecked(True)
 
