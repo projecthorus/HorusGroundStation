@@ -374,7 +374,7 @@ uploadFrameHabitatTitle = QtGui.QLabel("Last Upload: ")
 uploadFrameOziPlotter = QtGui.QCheckBox("Push Telem to Ozi")
 uploadFrameOziPlotter.setChecked(True)
 uploadFrameOziPlotterCars = QtGui.QCheckBox("Push Cars to Ozi")
-uploadFrameOziPlotterCars.setChecked(True)
+uploadFrameOziPlotterCars.setChecked(False)
 uploadFrameFoxTrot = QtGui.QCheckBox("FoxTrotGPS Update")
 uploadFrameFoxTrot.setChecked(True)
 
@@ -659,6 +659,11 @@ def processPacket(packet):
 
     elif payload_type == HORUS_PACKET_TYPES.CAR_TELEMETRY:
         lastPacketTypeValue.setText("Car Telem")
+
+        car_telem = decode_car_telemetry_packet(payload)
+
+        if uploadFrameOziPlotterCars.isChecked():
+            oziplotter_upload_car_telemetry(car_telem)
 
 
 

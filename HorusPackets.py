@@ -775,3 +775,22 @@ def oziplotter_upload_telemetry(telemetry,hostname="127.0.0.1"):
     except Exception as e:
         print("Failed to send to Ozi: " % e)
 
+def oziplotter_upload_basic_telemetry(telemetry,hostname="127.0.0.1"):
+    sentence = "TELEMETRY,%s,%.5f,%.5f,%d\n" % (telemetry['time'],telemetry['latitude'], telemetry['longitude'],telemetry['altitude'])
+
+    try:
+        ozisock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+        ozisock.sendto(sentence,(hostname,HORUS_OZIPLOTTER_PORT))
+        ozisock.close()
+    except Exception as e:
+        print("Failed to send to Ozi: " % e)
+
+def oziplotter_upload_car_telemetry(car_telem, hostname="127.0.0.1"):
+    sentence = "WAYPOINT,%d,%.5f,%.5f,%s\n" % (car_telem['callsign'], car_telem['latitude'], car_telem['longitude'], car_telem['message'])
+
+    try:
+        ozisock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+        ozisock.sendto(sentence,(hostname,HORUS_OZIPLOTTER_PORT))
+        ozisock.close()
+    except Exception as e:
+        print("Failed to send to Ozi: " % e)
