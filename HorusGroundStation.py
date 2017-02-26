@@ -637,7 +637,7 @@ def processPacket(packet):
             habitat_upload(telemetry)
 
         if uploadFrameOziPlotter.isChecked():
-            oziplotter_upload_telemetry(telemetry)
+            oziplotter_upload_basic_telemetry(telemetry)
 
         if uploadFrameFoxTrot.isChecked():
             foxtrot_update(telemetry)
