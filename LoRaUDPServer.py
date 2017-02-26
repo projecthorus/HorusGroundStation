@@ -136,32 +136,6 @@ from datetime import datetime
 from SX127x.LoRa import *
 #from SX127x.LoRaArgumentParser import LoRaArgumentParser
 
-parser = argparse.ArgumentParser()
-group = parser.add_mutually_exclusive_group()
-group.add_argument("--rpishield", action="store_true", help="Use a PiLoraGateway RPI Shield.")
-group.add_argument("--spibridge", action="store_true", help="Use a Arduino+LoRa Shield running SPIBridge Firmware.")
-parser.add_argument("-d" ,"--device", default="1", help="Hardware Device, either a serial port (i.e. /dev/ttyUSB0 or COM5) or SPI device number (i.e. 1)")
-parser.add_argument("-f", "--frequency",type=float,default=431.650,help="Operating Frequency (MHz)")
-parser.add_argument("-m", "--mode",type=int,default=0,help="Transmit Mode: 0 = Slow, 1 = Fast, 2 = Really Fast")
-parser.add_argument("--callsign", default="blank", help="OPTIONAL: Callsign used for automatic uplink slot requesting.")
-parser.add_argument("--payload_id", default=-1, type=int, help="OPTIONAL: Payload ID to automatically request slot from.")
-args = parser.parse_args()
-
-mode = int(args.mode)
-frequency = float(args.frequency)
-my_callsign = args.callsign
-payload_id = args.payload_id
-
-# Choose hardware interface
-if args.spibridge:
-    from SX127x.hardware_spibridge import HardwareInterface
-    hw = HardwareInterface(port=args.device)
-elif args.rpishield:
-    from SX127x.hardware_piloragateway import HardwareInterface
-    hw = HardwareInterface(int(args.device))
-else:
-    print >>sys.stderr, "Please provide a hardware interface argument"
-    sys.exit(1)
 
 class LoRaTxRxCont(LoRa):
     def __init__(self,hw,verbose=False,max_payload=255,mode=0,frequency=431.650, callsign='blank', low_priority_destination=-1):
@@ -655,28 +629,65 @@ class LoRaTxRxCont(LoRa):
                     self.tx_after_rx.put_nowait((tx_packet,dest_id,timeout))
 
 
+# Main Script
 
-lora = LoRaTxRxCont(hw,verbose=False,mode=mode,frequency=frequency, callsign=my_callsign, low_priority_destination=payload_id)
-#lora.set_pa_config(max_power=0, output_power=0)
+parser = argparse.ArgumentParser()
+group = parser.add_mutually_exclusive_group()
+group.add_argument("--rpishield", action="store_true", help="Use a PiLoraGateway RPI Shield.")
+group.add_argument("--spibridge", action="store_true", help="Use a Arduino+LoRa Shield running SPIBridge Firmware.")
+parser.add_argument("-d" ,"--device", default="1", help="Hardware Device, either a serial port (i.e. /dev/ttyUSB0 or COM5) or SPI device number (i.e. 1)")
+parser.add_argument("-f", "--frequency",type=float,default=431.650,help="Operating Frequency (MHz)")
+parser.add_argument("-m", "--mode",type=int,default=0,help="Transmit Mode: 0 = Slow, 1 = Fast, 2 = Really Fast")
+parser.add_argument("--callsign", default="blank", help="OPTIONAL: Callsign used for automatic uplink slot requesting.")
+parser.add_argument("--payload_id", default=-1, type=int, help="OPTIONAL: Payload ID to automatically request slot from.")
+args = parser.parse_args()
 
-#print(lora)
-#assert(lora.get_agc_auto_on() == 1)
+mode = int(args.mode)
+frequency = float(args.frequency)
+my_callsign = args.callsign
+payload_id = args.payload_id
 
 
-try:
-    lora.start()
-except KeyboardInterrupt:
-    sys.stdout.flush()
-    print("")
-    sys.stderr.write("KeyboardInterrupt\n")
-finally:
-    sys.stdout.flush()
-    print("")
-    lora.set_mode(MODE.SLEEP)
-    lora.udp_listener_running = False
-    lora.udp_process_running = False
-    print(lora)
-    print("Shutting down hardware interface...")
-    hw.teardown()
-    print("Done.")
+# Perform hardware interactions in an overall loop, to try and recover from hardware faults.
+while True:
+    if args.spibridge:
+        from SX127x.hardware_spibridge import HardwareInterface
+        hw = HardwareInterface(port=args.device)
+    elif args.rpishield:
+        from SX127x.hardware_piloragateway import HardwareInterface
+        hw = HardwareInterface(int(args.device))
+    else:
+        print >>sys.stderr, "Please provide a hardware interface argument"
+        sys.exit(1)
+
+    try:
+        lora = LoRaTxRxCont(hw,verbose=False,mode=mode,frequency=frequency, callsign=my_callsign, low_priority_destination=payload_id)
+        lora.start()
+    except KeyboardInterrupt:
+        sys.stdout.flush()
+        print("")
+        sys.stderr.write("KeyboardInterrupt\n")
+        break
+    except:
+        traceback.print_exc()
+        try:
+            print("Attempting to restart.")
+            lora.set_mode(MODE.SLEEP)
+            lora.udp_listener_running = False
+            lora.udp_process_running = False
+            hw.teardown()
+        except:
+            traceback.print_exc()
+            print("Issues re-starting...")
+            continue
+
+sys.stdout.flush()
+print("")
+lora.set_mode(MODE.SLEEP)
+lora.udp_listener_running = False
+lora.udp_process_running = False
+print(lora)
+print("Shutting down hardware interface...")
+hw.teardown()
+print("Done.")
 
