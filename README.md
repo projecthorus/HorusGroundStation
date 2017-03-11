@@ -5,12 +5,13 @@ Intended to be used to communicate with payloads running: https://github.com/pro
 
 ## History
 * v1.0 - Initial version, no TDMA support. Used on all Project Horus flights from Late 2015 through to November 2016.
-* <latest> - Updated version, in preparation for multiple-payload launches. TDMA support added, numerous packet format and GUI updates.
+* v1.1 - Updated version, in preparation for multiple-payload launches. TDMA support added, numerous packet format and GUI updates.
+* v1.2 - Now with low-priority uplink packet support, for relaying of chase car positions. Also merged ChaseTracker (chase car positions to Habitat) into this repository.
 
 ## Dependencies
 * Python 2.7
   * This should be stock on most modern linux distros.
-  * On Windows I recommend the 'Anaconda Python' Distribution.
+  * On Windows I recommend the 'Anaconda Python' Distribution, noting that newer versions use PyQt5 by default, and we need PyQt4.
 * PyQt4. 
   * Install with: sudo apt-get install python-qt4
 * pySX127x (If running a LoRa<->UDP Server)
@@ -34,6 +35,7 @@ The server can be started using:
 * RPi Shield: sudo python LoRaUDPServer.py --rpishield -d <Device Number>
   * where <Device Number> is either 0 (CE0) or 1 (CE1), depending on which RPi chip enable pin the LoRa module is connected to.
 * SPI Bridge: python LoRaUDPServer.py --spibridge -d /dev/ttyUSB0
+ * Note: The tighter timing restrictions needed for the new low priority uplink packets might mean the SPI Bridge interface may not be usable.
 
 ## Usage - Client Applications
 There are a few example client applications in this repository
@@ -42,5 +44,6 @@ There are a few example client applications in this repository
 * HorusMessenger.py - Basic text-messenger GUI application.
 * PacketSniffer.py - Console application which prints a textual representation of all LoRaUDPServer UDP broadcast packets seen on the local network.
 * TelemetryUpload.py - Listens for payload telemetry, and uploads to Habitat.
+* ChaseTracker.py - Pushes chase car positions from a local GPS (configured in defaults.cfg) to Habitat, and also into the local network via UDP broadcast.
 
 

@@ -1,5 +1,5 @@
 Raspberry Pi LoRa Gateway Configuration Instructions
-Mark Jessop <vk5qi@rfhead.net> 2016-01-22
+Mark Jessop <vk5qi@rfhead.net> 2017-03-10
 ====================================================
 These are a basic set of instructions for setting up a Raspberry Pi A/B+ as a
 LoRa Ground Station, using the HorusGroundStation software.
@@ -42,6 +42,11 @@ Assuming avahi works on your network & OS, this will let you ssh into the RPi at
 2.4 /etc/hosts
 Add a line in here with the above hostname, so it resolves to localhost.
 
+2.5 /boot (a different partition)
+Create a file called 'ssh' i.e. using
+	> touch ssh
+This will enable ssh on next boot. You MUST do this before first boot, else SSH keys won't be generated.
+
 3. 	Unmount the SD card, insert into Pi, and boot up.
 	If all went well, the Pi should appear on your network, and you should be able to SSH in using:
 	> ssh pi@loragatewayX.local
@@ -57,8 +62,8 @@ Add a line in here with the above hostname, so it resolves to localhost.
 6. Run raspi-config
 	> sudo raspi-config
 	Do the following:
-	1. Expand Filesystem
-	2. Under "Advanced Options", enable SPI
+	1. Under "Advanced Options", Expand Filesystem
+	2. Under "Interfacing Options", enable SPI
 	3. On exit, let the pi reboot.
 
 7. Update the Pi.
@@ -108,6 +113,8 @@ Add a line in here with the above hostname, so it resolves to localhost.
 	exit 0
 
 	Optionally you might want to run TelemetryUpload.py on boot as well, run python TelemetryUpload.py --help to check command line options.
+
+	Another neat trick is to run the script within screen, so the output can be viewed if issues arise. 
 
 13. Reboot and check it works!
 	> sudo shutdown -r now
