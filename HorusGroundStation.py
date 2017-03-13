@@ -534,7 +534,7 @@ mainwin.setCentralWidget(main_widget)
 mainwin.show()
 
 #
-#   UDP Packet Processing Functions
+#   UDP Packet Processing Functionsla
 #   This is where the real work happens!
 #
 
@@ -633,6 +633,8 @@ def processPacket(packet):
         lastlon = telemetry['longitude']
         lasttime = telemetry['time_biseconds']*2
 
+        send_payload_summary(callsign="LoRa", latitude=telemetry['latitude'], longitude=telemetry['longitude'], altitude=telemetry['altitude'], speed=calculated_speed, heading=-1)
+
         if uploadFrameHabitat.isChecked():
             habitat_upload(telemetry)
 
@@ -673,9 +675,9 @@ def process_udp(udp_packet):
     try:
         packet_dict = json.loads(udp_packet)
         
-
-        if packet_dict['type'] not in ['GPS','LOWPRIORITY']:
-            # Avoid flooding the terminal with Local GPS data
+        # Avoid flooding the terminal with: Local GPS data, Control messages, Summary messages.
+        if packet_dict['type'] not in ['GPS','LOWPRIORITY','PAYLOAD_SUMMARY']:
+            
             if (packet_dict['type'] == 'STATUS') and consoleInhibitStatus.isChecked():
                 pass
             else:

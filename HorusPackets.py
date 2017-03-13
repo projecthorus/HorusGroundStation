@@ -628,7 +628,6 @@ def update_frequency(freq=431.650):
         s.sendto(json.dumps(packet), ('127.0.0.1', HORUS_UDP_PORT))
 
 
-
 # Produce short string representation of packet payload contents.
 def payload_to_string(packet):
     payload_type = decode_payload_type(packet)
@@ -718,6 +717,9 @@ def udp_packet_to_string(udp_packet):
     elif pkt_type == "GPS":
         timestamp = datetime.utcnow().isoformat()
         return "%s Local GPS: %.4f,%.4f %d kph %d m" % (timestamp,udp_packet['latitude'], udp_packet['longitude'], udp_packet['speed'], udp_packet['altitude'])
+    elif pkt_type == "PAYLOAD_SUMMARY":
+        timestamp == datetime.utcnow().isoformat()
+        return "%s Payload Summary Status" % timestamp
     elif pkt_type == "LOWPRIORITY":
         if 'payload' in udp_packet.keys():
             if udp_packet['payload'] == []:
@@ -765,6 +767,8 @@ def habitat_upload_payload_telemetry(telemetry, payload_callsign = "HORUSLORA", 
         return (False,"Failed to upload to Habitat: %s" % (str(e)))
 
 # OziPlotter Upload Functions
+
+# Deprecated OziPlotter upload function (using the complete HORUSLORA sentence, as uploaded to habitat)
 def oziplotter_upload_telemetry(telemetry,hostname="127.0.0.1"):
     sentence = telemetry_to_sentence(telemetry)
 
@@ -775,6 +779,7 @@ def oziplotter_upload_telemetry(telemetry,hostname="127.0.0.1"):
     except Exception as e:
         print("Failed to send to Ozi: " % e)
 
+# The new 'generic' OziPlotter upload function, with no callsign, or checksumming (why bother, really)
 def oziplotter_upload_basic_telemetry(telemetry,hostname="127.0.0.1"):
     sentence = "TELEMETRY,%s,%.5f,%.5f,%d\n" % (telemetry['time'],telemetry['latitude'], telemetry['longitude'],telemetry['altitude'])
 
@@ -785,6 +790,7 @@ def oziplotter_upload_basic_telemetry(telemetry,hostname="127.0.0.1"):
     except Exception as e:
         print("Failed to send to Ozi: " % e)
 
+# Push a car waypoint into OziPlotter. Could be used for other waypoints too.
 def oziplotter_upload_car_telemetry(car_telem, hostname="127.0.0.1"):
     sentence = "WAYPOINT,%s,%.5f,%.5f,%s\n" % (car_telem['callsign'], car_telem['latitude'], car_telem['longitude'], car_telem['message'])
 
@@ -794,3 +800,32 @@ def oziplotter_upload_car_telemetry(car_telem, hostname="127.0.0.1"):
         ozisock.close()
     except Exception as e:
         print("Failed to send to Ozi: " % e)
+
+# Send an update on the core payload telemetry statistics into the network via UDP broadcast.
+# This can be used by other devices hanging off the network to display vital stats about the payload.
+def send_payload_summary(callsign, latitude, longitude, altitude, speed=-1, heading=-1):
+    packet = {
+        'type' : 'PAYLOAD_SUMMARY',
+        'callsign' : callsign,
+        'latitude' : latitude,
+        'longitude' : longitude,
+        'altitude' : altitude,
+        'speed' : speed,
+        'heading': heading
+    }
+
+    # Set up our UDP socket
+    s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
+    s.settimeout(1)
+    # Set up socket for broadcast, and allow re-use of the address
+    s.setsockopt(socket.SOL_SOCKET,socket.SO_BROADCAST,1)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+    except:
+        pass
+    s.bind(('',HORUS_UDP_PORT))
+    try:
+        s.sendto(json.dumps(packet), ('<broadcast>', HORUS_UDP_PORT))
+    except socket.error:
+        s.sendto(json.dumps(packet), ('127.0.0.1', HORUS_UDP_PORT))
