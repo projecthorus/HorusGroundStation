@@ -113,7 +113,7 @@ def calculate_az_el_range():
     
 
 def update_payload_stats(packet):
-    global payload_latitude, payload_longitude, payload_altitude, payload_lastdata, payload_data_age
+    global payload_latitude, payload_longitude, payload_altitude, payload_lastdata, payload_data_age, speed_kph, asc_rate_m
     try:
         timestamp = time.time()
         time_diff = timestamp - payload_lastdata

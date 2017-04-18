@@ -30,8 +30,11 @@ payload_data_age = 0
 car_latitude = 0.0
 car_longitude = 0.0
 car_altitude = 0.0
+car_bearing = -1
+car_speed = 0
 car_lastdata = -1
 car_data_age = 0
+
 
 # PyQt Window Setup
 app = QtGui.QApplication([])
@@ -43,7 +46,7 @@ main_widget = QtGui.QWidget()
 layout = QtGui.QGridLayout()
 main_widget.setLayout(layout)
 # Create Widgets
-data_font_size = 28
+data_font_size = 18
 altitudeLabel = QtGui.QLabel("<b>Alt</b>")
 altitudeValue = QtGui.QLabel("<b>00000m</b>")
 altitudeValue.setFont(QtGui.QFont("Courier New", data_font_size, QtGui.QFont.Bold))
@@ -157,12 +160,25 @@ def update_payload_stats(packet):
     calculate_az_el_range()
 
 def update_car_stats(packet):
-    global car_latitude, car_longitude, car_altitude, car_lastdata, car_data_age
+    global car_latitude, car_longitude, car_altitude, car_lastdata, car_data_age, car_bearing, car_speed
     try:
         timestamp = time.time()
-        car_latitude = packet['latitude']
-        car_longitude = packet['longitude']
-        car_altitude = packet['altitude']
+        time_diff = timestamp - car_lastdata
+
+        new_car_latitude = packet['latitude']
+        new_car_longitude = packet['longitude']
+        new_car_altitude = packet['altitude']
+
+        car_speed = speed_calc(car_latitude,car_longitude, new_car_latitude, new_car_longitude,time_diff)
+
+        if car_speed > 15:
+            car_movement = position_info((car_latitude,car_longitude,car_altitude), (new_car_latitude,new_car_longitude,new_car_altitude))
+            car_bearing = car_movement['bearing']
+
+        car_latitude = new_car_latitude
+        car_longitude = new_car_longitude
+        car_altitude = new_car_altitude
+
         car_lastdata = timestamp
         car_data_age = 0.0
         calculate_az_el_range()
@@ -180,6 +196,7 @@ def process_udp(udp_packet):
         elif packet_dict['type'] == 'GPS':
             update_car_stats(packet_dict)
         else:
+            print(".")
             pass
             #print("Got other packet type (%s)" % packet_dict['type'])
 
