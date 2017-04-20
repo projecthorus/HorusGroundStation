@@ -491,7 +491,7 @@ update_car_telem_display()
 # Auto-Beacon Flag, for transmitting car telemetry without a payload present.
 auto_beacon_enabled = False # Disabled by default.
 auto_beacon_counter = 0.0
-auto_beacon_timeout = 30.0 # Only perform auto-beaconing if we haven't heard a payload for 30 seconds.
+auto_beacon_timeout = 60.0 # Only perform auto-beaconing if we haven't heard a payload for 30 seconds.
 autp_beacon_cycle = 60 # Cycle time based on seconds in day.
 auto_beacon_slot = 0
 auto_beacon_triggered = False
