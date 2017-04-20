@@ -490,6 +490,7 @@ update_car_telem_display()
 
 # Auto-Beacon Flag, for transmitting car telemetry without a payload present.
 auto_beacon_enabled = False # Disabled by default.
+auto_beacon_counter = 0.0
 auto_beacon_timeout = 30.0 # Only perform auto-beaconing if we haven't heard a payload for 30 seconds.
 autp_beacon_cycle = 60 # Cycle time based on seconds in day.
 auto_beacon_slot = 0
@@ -676,8 +677,11 @@ def getHeardPayloadList():
         return payloads
 
 def processPacket(packet):
-    global last_packet_timer, console, lastlat, lastlon, lasttime, current_payload, auto_beacon_enabled, upload_cars_to_ozi, upload_telemetry_to_ozi, upload_telemetry_to_foxtrot, car_telem_data_store
+    global last_packet_timer, console, lastlat, lastlon, lasttime, current_payload, auto_beacon_enabled, auto_beacon_counter, upload_cars_to_ozi, upload_telemetry_to_ozi, upload_telemetry_to_foxtrot, car_telem_data_store
+ 
+    # Reset packet timer.
     last_packet_timer = 0.0
+
     # Immediately update the last packet data.
     try:
         lastPacketRSSIValue.setText("%d dBm" % packet['rssi'])
@@ -700,30 +704,33 @@ def processPacket(packet):
     payload_id = decode_payload_id(payload)
 
     # If we haven't heard any payloads yet, add this new payload to the list and set it as the current payload.
-    if len(getHeardPayloadList()) == 0:
+    if (len(getHeardPayloadList()) == 0) and (payload_id != 255):
         payloadSelectionList.addItem(str(payload_id))
         payloadSelectionList.setCurrentRow(0)
         current_payload = payload_id
 
-    if payload_id not in getHeardPayloadList():
+    if (payload_id not in getHeardPayloadList()) and (payload_id != 255):
+        # Add payload ID to heard payloads list if we haven't seen it, and it isn't a 'broadcast' payload ID (255).
         payloadSelectionList.addItem(str(payload_id))
 
+    payload_type = decode_payload_type(payload)
+
     # At this point we're pretty sure we have traffic from some sort of payload,
-    # turn off auto-beaconing to avoid packet collisions.
-    if auto_beacon_enabled:
+    # turn off auto-beaconing to avoid packet collisions, but only if the packet is not a car telemetry packet.
+    if auto_beacon_enabled and (payload_type != HORUS_PACKET_TYPES.CAR_TELEMETRY):
         console.appendPlainText("Auto-Beaconing Disabled.")
         auto_beacon_enabled = False
-
-    payload_type = decode_payload_type(payload)
 
     # Only proceed if the data is from our current payload.
     # The decoded string data will still show up in the packet sniffer window.
     # We do want to make an exception for car telemetry data, which we always want to process,
     # so we can see 'broadcast' telemetry.
     if (payload_id != current_payload) and (payload_type != HORUS_PACKET_TYPES.CAR_TELEMETRY):
+        auto_beacon_counter = 0.0
         return
 
     if payload_type == HORUS_PACKET_TYPES.PAYLOAD_TELEMETRY:
+        auto_beacon_counter = 0.0
         telemetry = decode_horus_payload_telemetry(payload)
         print(telemetry_to_sentence(telemetry))
         lastPacketTypeValue.setText("Telemetry")
@@ -879,8 +886,9 @@ t = Thread(target=udp_rx_thread)
 t.start()
 
 def read_queue():
-    global last_packet_timer, auto_beacon_enabled, auto_beacon_timeout, console
+    global last_packet_timer, auto_beacon_enabled, auto_beacon_timeout, auto_beacon_counter, console
     last_packet_timer += timer_update_rate
+    auto_beacon_counter += timer_update_rate
     try:
         packet = rxqueue.get_nowait()
         process_udp(packet)
@@ -889,7 +897,7 @@ def read_queue():
     lastPacketCounterValue.setText("%.1f seconds ago." % last_packet_timer)
 
     # Auto-beaconing logic.
-    if (last_packet_timer > auto_beacon_timeout) and (auto_beacon_enabled == False):
+    if (auto_beacon_counter > auto_beacon_timeout) and (auto_beacon_enabled == False):
         auto_beacon_enabled = True
         auto_beacon_setup()
         console.appendPlainText("Auto-Beaconing Enabled.")
