@@ -9,7 +9,7 @@ from HorusPackets import *
 from threading import Thread
 from PyQt4 import QtGui, QtCore
 from datetime import datetime
-import socket,json,sys,Queue,random,os,math,traceback
+import socket,json,sys,Queue,random,os,math,traceback,random
 import ConfigParser
 
 udp_broadcast_port = HORUS_UDP_PORT
@@ -18,7 +18,7 @@ udp_listener_running = False
 foxtrot_log = "foxtrot.log"
 groundstation_log = "groundstation.log"
 
-# RX Message queue to avoid threading issues.
+# Message queues to avoid threading issues.
 RX_QUEUE_SIZE = 32
 rxqueue = Queue.Queue(RX_QUEUE_SIZE)
 txed_packets = []
@@ -26,15 +26,29 @@ txed_packets = []
 # PyQt Window Setup
 app = QtGui.QApplication([])
 
+# Last Packet Counter
 timer_update_rate = 0.1 # Seconds
 last_packet_timer = 0
 
+# Currently selected payload
 current_payload = 0
+my_slot_id = -1
 
 # Variables for Ground Speed Calculation
 lastlat = -34.0
 lastlon = 138.0
 lasttime = 0.0
+
+# Car Telemetry Buffers
+mylat = 0.0
+mylon = 0.0
+myspeed = 0.0
+
+# Options that will later get pulled from a config file
+upload_cars_to_ozi = True
+upload_telemetry_to_ozi = True
+upload_telemetry_to_foxtrot = True
+
 
 # Widgets
 
@@ -362,32 +376,6 @@ cutdownResponseLayout.addWidget(cutdownResponseParamValue,3,3,1,1)
 
 cutdownResponseFrame.setLayout(cutdownResponseLayout)
 
-uploadFrame = QtGui.QFrame()
-uploadFrame.setFixedSize(200,190)
-uploadFrame.setFrameStyle(QtGui.QFrame.Box)
-uploadFrame.setLineWidth(1)
-uploadFrameTitle = QtGui.QLabel("<b><u>Habitat/APRS Upload</u></b>")
-
-uploadFrameHabitat = QtGui.QCheckBox("Habitat Upload")
-uploadFrameHabitat.setChecked(False)
-uploadFrameHabitatTitle = QtGui.QLabel("Last Upload: ")
-uploadFrameOziPlotter = QtGui.QCheckBox("Push Telem to Ozi")
-uploadFrameOziPlotter.setChecked(True)
-uploadFrameOziPlotterCars = QtGui.QCheckBox("Push Cars to Ozi")
-uploadFrameOziPlotterCars.setChecked(True)
-uploadFrameFoxTrot = QtGui.QCheckBox("FoxTrotGPS Update")
-uploadFrameFoxTrot.setChecked(True)
-
-uploadFrameLayout = QtGui.QGridLayout()
-uploadFrameLayout.addWidget(uploadFrameTitle,0,0,1,1)
-uploadFrameLayout.addWidget(uploadFrameHabitat,1,0,1,1)
-uploadFrameLayout.addWidget(uploadFrameHabitatTitle,2,0,1,1)
-uploadFrameLayout.addWidget(uploadFrameOziPlotter,3,0,1,1)
-uploadFrameLayout.addWidget(uploadFrameOziPlotterCars,4,0,1,1)
-uploadFrameLayout.addWidget(uploadFrameFoxTrot,5,0,1,1)
-
-uploadFrame.setLayout(uploadFrameLayout)
-
 lowpriFrame = QtGui.QFrame()
 lowpriFrame.setFixedSize(200,190)
 lowpriFrame.setFrameStyle(QtGui.QFrame.Box)
@@ -424,8 +412,13 @@ lowpriFrame.setLayout(lowpriFrameLayout)
 def request_slot():
     update_low_priority_settings(callsign=str(myCallsignValue.text()), destination=current_payload)
 
+def reset_slot():
+    global my_slot_id
+    my_slot_id = -1
+    reset_low_priority_slot()
+
 lowpriRequestButton.clicked.connect(request_slot)
-lowpriResetButton.clicked.connect(reset_low_priority_slot)
+lowpriResetButton.clicked.connect(reset_slot)
 
 
 def habitat_upload(telemetry):
@@ -453,6 +446,120 @@ def foxtrot_update(telemetry):
         foxsock.close()
     except Exception as e:
         print("Failed to request FoxTrotGPS Update: " % e)
+
+
+# Car Telemetry Data Frame
+carTelemFrame = QtGui.QFrame()
+carTelemFrame.setFixedSize(200,190)
+carTelemFrame.setFrameStyle(QtGui.QFrame.Box)
+carTelemFrame.setLineWidth(1)
+
+carTelemFrameTitle = QtGui.QLabel("<b><u>Car Telemetry Data</u></b>")
+carTelemData = QtGui.QPlainTextEdit()
+carTelemData.setReadOnly(True)
+manualBeaconButton = QtGui.QPushButton("Manual Beacon")
+
+carTelemFrameLayout = QtGui.QGridLayout()
+carTelemFrameLayout.addWidget(carTelemFrameTitle,0,0,1,2)
+carTelemFrameLayout.addWidget(carTelemData,1,0,1,2)
+carTelemFrameLayout.addWidget(manualBeaconButton,2,0,1,2)
+
+carTelemFrame.setLayout(carTelemFrameLayout)
+
+# Car Telemetry Data Management
+# Dictionary which holds car telemetry data.
+car_telem_data_store = {}
+
+def update_car_telem_display():
+    car_telem_data_text = ""
+    if len(car_telem_data_store.keys()) == 0:
+        car_telem_data_text = "No Data."
+    else:
+        seen_calls = car_telem_data_store.keys()
+        seen_calls.sort()
+        for call in seen_calls:
+            telem = car_telem_data_store[call]
+            car_telem_data_text += "%s: %s\n" % (call, telem['message'])
+
+    carTelemData.setPlainText(car_telem_data_text)
+
+# Initial update
+update_car_telem_display()
+
+# Auto-Beaconing Functions
+
+# Auto-Beacon Flag, for transmitting car telemetry without a payload present.
+auto_beacon_enabled = False # Disabled by default.
+auto_beacon_timeout = 30.0 # Only perform auto-beaconing if we haven't heard a payload for 30 seconds.
+autp_beacon_cycle = 60 # Cycle time based on seconds in day.
+auto_beacon_slot = 0
+auto_beacon_triggered = False
+
+
+def auto_beacon_send():
+    global myCallsignValue, mylat, mylon, myspeed, lowpriFrameMessage
+    packet = create_car_telemetry_packet(
+        destination=255,
+        callsign=str(myCallsignValue.text()),
+        latitude=mylat,
+        longitude=mylon,
+        speed=myspeed,
+        message=str(lowpriFrameMessage.text())
+    )
+    tx_packet(packet)
+
+manualBeaconButton.clicked.connect(auto_beacon_send)
+
+
+def auto_beacon_setup():
+    global auto_beacon_slot, my_slot_id
+    # Either set the auto-beacon time based on the slot ID, or use a random offset.
+    if my_slot_id != -1:
+        # We have a slot, we'll use this to set an offset from the start of the minute to transmit in.
+        auto_beacon_slot = my_slot_id*3
+    else:
+        # We don't have a slot. Pick a random slot between 1 and 15 (inclusive)
+        auto_beacon_slot = random.randint(1,15)*3
+
+    print("Set auto-beacon time of %d" % auto_beacon_slot)
+
+# Determine if it is time to auto-beacon.
+# Returns True if we should transmit, False overwise.
+def auto_beacon_time():
+    global lowpriFrameEnabled, auto_beacon_enabled, auto_beacon_slot, auto_beacon_triggered
+
+    if auto_beacon_enabled == False:
+        return False
+
+    # Only beacon if the user has checked the 'enable car telemetry' button.
+    if lowpriFrameEnabled.isChecked() == False:
+        return False
+
+    # We transmit if the current second is equal to our auto beacon time, and if we haven't already transmitted in this second yet.
+    current_second = datetime.utcnow().second
+
+    if (current_second == auto_beacon_slot):
+        if auto_beacon_triggered == False:
+            # If we haven't already transmitted in this cycle, set the flag to say we have.
+            auto_beacon_triggered = True
+            # Re-calculate our slot time.
+            auto_beacon_setup()
+            return True
+
+    elif current_second == 0:
+        # Reset beacon triggered indicator at the start of each minute.
+        auto_beacon_triggered = False
+
+    else:
+        pass
+
+    return False
+
+
+#
+# Read in Configuration File here, to populate various fields.
+#
+
 
 # Now attempt to read in a config file to preset various parameters.
 try:
@@ -489,8 +596,8 @@ layout.addWidget(cutdownFrame,0,4,1,2)
 layout.addWidget(cutdownResponseFrame,1,4,1,2)
 
 layout.addWidget(packetSnifferFrame,2,0,1,4)
-layout.addWidget(uploadFrame,2,4,1,1)
-layout.addWidget(lowpriFrame,2,5,1,1)
+layout.addWidget(lowpriFrame,2,4,1,1)
+layout.addWidget(carTelemFrame,2,5,1,1)
 
 mainwin = QtGui.QMainWindow()
 
@@ -534,7 +641,7 @@ mainwin.setCentralWidget(main_widget)
 mainwin.show()
 
 #
-#   UDP Packet Processing Functionsla
+#   UDP Packet Processing Functions
 #   This is where the real work happens!
 #
 
@@ -569,7 +676,7 @@ def getHeardPayloadList():
         return payloads
 
 def processPacket(packet):
-    global last_packet_timer, lastlat, lastlon, lasttime, current_payload
+    global last_packet_timer, console, lastlat, lastlon, lasttime, current_payload, auto_beacon_enabled, upload_cars_to_ozi, upload_telemetry_to_ozi, upload_telemetry_to_foxtrot, car_telem_data_store
     last_packet_timer = 0.0
     # Immediately update the last packet data.
     try:
@@ -601,12 +708,20 @@ def processPacket(packet):
     if payload_id not in getHeardPayloadList():
         payloadSelectionList.addItem(str(payload_id))
 
-    # Only proceed if the data is from our current payload.
-    # The decoded string data will still show up in the packet sniffer window.
-    if payload_id != current_payload:
-        return
+    # At this point we're pretty sure we have traffic from some sort of payload,
+    # turn off auto-beaconing to avoid packet collisions.
+    if auto_beacon_enabled:
+        console.appendPlainText("Auto-Beaconing Disabled.")
+        auto_beacon_enabled = False
 
     payload_type = decode_payload_type(payload)
+
+    # Only proceed if the data is from our current payload.
+    # The decoded string data will still show up in the packet sniffer window.
+    # We do want to make an exception for car telemetry data, which we always want to process,
+    # so we can see 'broadcast' telemetry.
+    if (payload_id != current_payload) and (payload_type != HORUS_PACKET_TYPES.CAR_TELEMETRY):
+        return
 
     if payload_type == HORUS_PACKET_TYPES.PAYLOAD_TELEMETRY:
         telemetry = decode_horus_payload_telemetry(payload)
@@ -635,13 +750,11 @@ def processPacket(packet):
 
         send_payload_summary(callsign="LoRa", latitude=telemetry['latitude'], longitude=telemetry['longitude'], altitude=telemetry['altitude'], speed=calculated_speed, heading=-1)
 
-        if uploadFrameHabitat.isChecked():
-            habitat_upload(telemetry)
 
-        if uploadFrameOziPlotter.isChecked():
+        if upload_telemetry_to_ozi:
             oziplotter_upload_basic_telemetry(telemetry)
 
-        if uploadFrameFoxTrot.isChecked():
+        if upload_telemetry_to_foxtrot:
             foxtrot_update(telemetry)
 
     elif payload_type == HORUS_PACKET_TYPES.TEXT_MESSAGE:
@@ -664,14 +777,21 @@ def processPacket(packet):
 
         car_telem = decode_car_telemetry_packet(payload)
 
-        if uploadFrameOziPlotterCars.isChecked():
+        # Update 'neighbours' display here.
+        car_telem_data_store[car_telem['callsign']] = car_telem
+        update_car_telem_display()
+
+        # Push data to ozi.
+        if upload_cars_to_ozi:
             # Don't plot your own position. OziExplorer handles that just fine.
             if car_telem['callsign'] != str(myCallsignValue.text()):
                 oziplotter_upload_car_telemetry(car_telem)
 
 
 
+
 def process_udp(udp_packet):
+    global mylat, mylon, myspeed, current_payload, console, consoleInhibitStatus, lowpriFrameSlotValue, lowpriGPSValue, lowpriFrameMessage, myCallsignValue, my_slot_id
     try:
         packet_dict = json.loads(udp_packet)
         
@@ -691,6 +811,7 @@ def process_udp(udp_packet):
         elif packet_dict['type'] == 'STATUS':
             # A status update from the LoRa Ground Station.
             # Process and display some values.
+            my_slot_id = packet_dict['uplink_slot_id']
             if packet_dict['uplink_slot_id'] == -1:
                 lowpriFrameSlotValue.setText("None")
             else:
@@ -700,6 +821,10 @@ def process_udp(udp_packet):
             # Car position update from ChaseTracker.
             if packet_dict['valid']:
                 lowpriGPSValue.setText("%.4f,%.4f %d kph" % (packet_dict['latitude'], packet_dict['longitude'], packet_dict['speed']))
+                mylat = packet_dict['latitude']
+                mylon = packet_dict['longitude']
+                myspeed = packet_dict['speed']
+
                 if lowpriFrameEnabled.isChecked():
                     set_low_priority_payload(create_car_telemetry_packet(
                         destination=current_payload,
@@ -754,7 +879,7 @@ t = Thread(target=udp_rx_thread)
 t.start()
 
 def read_queue():
-    global last_packet_timer
+    global last_packet_timer, auto_beacon_enabled, auto_beacon_timeout, console
     last_packet_timer += timer_update_rate
     try:
         packet = rxqueue.get_nowait()
@@ -763,10 +888,21 @@ def read_queue():
         pass
     lastPacketCounterValue.setText("%.1f seconds ago." % last_packet_timer)
 
-# Start a timer to attempt to read the remote station status every 5 seconds.
-timer = QtCore.QTimer()
-timer.timeout.connect(read_queue)
-timer.start(int(timer_update_rate*1000))
+    # Auto-beaconing logic.
+    if (last_packet_timer > auto_beacon_timeout) and (auto_beacon_enabled == False):
+        auto_beacon_enabled = True
+        auto_beacon_setup()
+        console.appendPlainText("Auto-Beaconing Enabled.")
+
+    # Decide if we should beacon.
+    if auto_beacon_time():
+        auto_beacon_send()
+
+
+# 10Hz timer to read UDP packets.
+udp_timer = QtCore.QTimer()
+udp_timer.timeout.connect(read_queue)
+udp_timer.start(int(timer_update_rate*1000))
 
 ## Start Qt event loop unless running in interactive mode or using pyside.
 if __name__ == '__main__':
