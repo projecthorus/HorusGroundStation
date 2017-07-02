@@ -21,6 +21,7 @@ stationary = False
 payload_callsign = HORUSLORA
 
 [GPS]
+# Does what it says on the tin. Helps avoid calls from parents during balloon chases. Units in km/hr.
 speed_cap = 110
 # GPS Serial Port Setting
 # For Windows, use COM1, COM2, etc.
