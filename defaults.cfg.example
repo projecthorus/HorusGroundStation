@@ -1,0 +1,28 @@
+#
+# Example configuration file for the various Horus Ground Station Utilities
+# 
+# This configuration file is used by multiple applications with the ground station suite
+# including ChaseTracker, HorusGroundStation, and TelemetryUpload
+#
+# Create a copy of this file as defaults.cfg and edit as appropriate.
+#
+[User]
+# User Callsign for Habitat Uploads (Telemetry and Chase Car position)
+callsign = N0CALL
+# Cutdown/Ping command password. Max 3 characters!
+password = AAA
+
+[Payload]
+# Payload Callsign, for uploads to Habitat
+# Received binary telemetry is converted to an ASCII sentence, with this callsign.
+payload_callsign = HORUSLORA
+
+[GPS]
+speed_cap = 110
+# GPS Serial Port Setting
+# For Windows, use COM1, COM2, etc.
+# On linux/OSX, use the /dev/ttyUSB0 or /dev/tty.usbserial device name
+serial_port = /dev/ttyUSB0
+serial_baud = 57600
+# How often to update chasecar position on habhub (seconds)
+update_rate = 30

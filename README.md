@@ -14,6 +14,7 @@ Intended to be used to communicate with payloads running: https://github.com/pro
   * On Windows I recommend the 'Anaconda Python' Distribution, noting that newer versions use PyQt5 by default, and we need PyQt4.
 * PyQt4. 
   * Install with: sudo apt-get install python-qt4
+  * [TODO] Update all this code to use PyQt5... Any volunteers?
 * pySX127x (If running a LoRa<->UDP Server)
   * git clone https://github.com/darksidelemm/pySX127x
   * Copy the SX127x directory into this directory. 
@@ -38,12 +39,16 @@ The server can be started using:
  * Note: The tighter timing restrictions needed for the new low priority uplink packets might mean the SPI Bridge interface may not be usable.
 
 ## Usage - Client Applications
-There are a few example client applications in this repository
+There are a few example client applications in this repository. Make a copy of defaults.cfg.example as defaults.cfg and edit as appropriate before running any of these.
+
 * HorusGroundStation.py - Horus Cutdown Payload ground-station GUI application, which shows telemetry information and allows commanding of the cutdown payload.
-  * This can read some user settings (Callsign, Cutdown Password) from defaults.cfg
-* HorusMessenger.py - Basic text-messenger GUI application.
+  * This reads some user settings (Callsign, Cutdown Password) from defaults.cfg
+* HorusMessenger.py - Basic text-messenger GUI application. Partially deprecated with the addition of 'status' messages to the main HorusGroundStation GUI.
 * PacketSniffer.py - Console application which prints a textual representation of all LoRaUDPServer UDP broadcast packets seen on the local network.
 * TelemetryUpload.py - Listens for payload telemetry, and uploads to Habitat.
 * ChaseTracker.py - Pushes chase car positions from a local GPS (configured in defaults.cfg) to Habitat, and also into the local network via UDP broadcast.
+* ChaseTrackerNoGUI.py - Same as above, but with no GUI, suitable for Headless use.
+* SummaryGUI.py - A 'Heads Up' GUI with just the basic payload information. Used in my chase car to provide a quick-look display to the driver.
+
 
 
