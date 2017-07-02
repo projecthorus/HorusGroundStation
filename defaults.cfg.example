@@ -11,6 +11,9 @@
 callsign = N0CALL
 # Cutdown/Ping command password. Max 3 characters!
 password = AAA
+# Is user a stationary listener?
+# True makes the user show up as a radio mast instead of a Car on the Habitat map.
+stationary = False
 
 [Payload]
 # Payload Callsign, for uploads to Habitat

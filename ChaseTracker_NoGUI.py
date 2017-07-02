@@ -1,14 +1,13 @@
 #!/usr/bin/env python
 #
-# ChaseTracker 2.0
+# ChaseTracker - No GUI Version
 # Written by: Mark Jessop <vk5qi@rfhead.net> (C) 2015
 #
-import urllib2, json, ConfigParser, sys, time, serial, Queue, socket
+import urllib2, json, ConfigParser, sys, time, serial, socket, re, logging
 from threading import Thread
 from base64 import b64encode
 from hashlib import sha256
 from datetime import datetime
-from PyQt4 import QtGui, QtCore
 from HorusPackets import *
 
 # Attempt to read in config file
@@ -22,8 +21,6 @@ serial_baud = int(config.get("GPS","serial_baud"))
 speed_cap = int(config.get("GPS","speed_cap"))
 stationary = bool(config.get("User","stationary"))
 
-# RX Message queue to avoid threading issues.
-rxqueue = Queue.Queue(16)
 
 # Position Variables
 position_valid = False
@@ -32,39 +29,6 @@ lon = 138.0
 alt = 0
 speed = 0 # m/s
 
-# GUI Initialisation
-app = QtGui.QApplication([])
-
-currentPositionLabel = QtGui.QLabel("")
-
-gpsStatusLabel = QtGui.QLabel("No Data Yet...")
-gpsStatusLabel.setWordWrap(True)
-
-habitatStatusLabel = QtGui.QLabel("No Data Yet...")
-habitatStatusLabel.setWordWrap(True)
-
-uploadEnabled = QtGui.QCheckBox("Enable Upload")
-uploadEnabled.setChecked(True)
-
-# Create and Lay-out window
-win = QtGui.QWidget()
-win.resize(500,100)
-win.show()
-win.setWindowTitle("ChaseTracker - %s" % callsign)
-layout = QtGui.QGridLayout()
-win.setLayout(layout)
-# Add Widgets
-layout.addWidget(currentPositionLabel,0,0,1,1)
-layout.addWidget(uploadEnabled,0,1,1,1)
-layout.addWidget(gpsStatusLabel,1,0,1,2)
-layout.addWidget(habitatStatusLabel,2,0,1,2)
-
-
-def updateGui():
-    positionText = "<b>Lat/Long:</b> %.5f, %.5f <br> <b>Speed:</b> %d kph<br> <b>Alt:</b> %d m" % (lat,lon,speed*3.6,alt)
-    currentPositionLabel.setText(positionText)
-
-updateGui()
 
 # Broadcast our position within the local network via UDP broadcast,
 # so other applications can make use of it.
@@ -95,7 +59,6 @@ def gps_via_udp():
         s.sendto(json.dumps(packet), ('127.0.0.1', HORUS_UDP_PORT))
 
 # Courtesy of https://github.com/Knio/pynmea2/
-import re
 def dm_to_sd(dm):
     '''
     Converts a geographic coordiante given in "degres/minutes" dddmm.mmmm
@@ -110,9 +73,9 @@ def dm_to_sd(dm):
 
 # We currently only recognise GPGGA and GPRMC
 def parseNMEA(data):
-    global lat,lon,speed,alt,position_valid,speed_cap
+    global lat,lon,speed,alt,position_valid, speed_cap
     if "$GPRMC" in data:
-        gpsStatusLabel.setText("Got GPRMC.")
+        logging.debug("Got GPRMC.")
         gprmc = data.split(",")
         gprmc_lat = dm_to_sd(gprmc[3])
         gprmc_latns = gprmc[4]
@@ -133,7 +96,7 @@ def parseNMEA(data):
         speed = min(speed_cap*0.27778, gprmc_speed*0.51444)
 
     if "$GPGGA" in data:
-        gpsStatusLabel.setText("Got GPGGA.")
+        logging.debug("Got GPGGA.")
         gpgga = data.split(",")
         gpgga_lat = dm_to_sd(gpgga[2])
         gpgga_latns = gpgga[3]
@@ -158,8 +121,6 @@ def parseNMEA(data):
         else:
             position_valid = True
             gps_via_udp()
-
-    updateGui()
 
 
 # Habitat Upload Stuff, from https://raw.githubusercontent.com/rossengeorgiev/hab-tools/master/spot2habitat_chase.py
@@ -187,7 +148,7 @@ def postData(doc):
             'Referer': url_habitat_db,
             }
 
-    habitatStatusLabel.setText("Posting doc to habitat\n%s" % json.dumps(doc, indent=2))
+    logging.debug("Posting doc to habitat\n%s" % json.dumps(doc, indent=2))
 
     req = urllib2.Request(url_habitat_db, data, headers)
     return urllib2.urlopen(req).read()
@@ -198,11 +159,11 @@ def fetch_uuids():
             resp = urllib2.urlopen(url_habitat_uuids % 10).read()
             data = json.loads(resp)
         except urllib2.HTTPError, e:
-            habitatStatusLabel.setText("Unable to fetch uuids. Retrying in 10 seconds...");
+            logging.error("Unable to fetch uuids. Retrying in 10 seconds...");
             time.sleep(10)
             continue
 
-        habitatStatusLabel.setText("Received a set of uuids.")
+        logging.debug("Received a set of uuids.")
         uuids.extend(data['uuids'])
         break;
 
@@ -217,10 +178,10 @@ def init_callsign(callsign):
     while True:
         try:
             resp = postData(doc)
-            habitatStatusLabel.setText("Callsign initialized.")
+            logging.info("Callsign initialized.")
             break;
         except urllib2.HTTPError, e:
-            habitatStatusLabel.setText("Unable initialize callsign. Retrying in 10 seconds...");
+            logging.error("Unable initialize callsign. Retrying in 10 seconds...");
             time.sleep(10)
             continue
 
@@ -248,58 +209,94 @@ def uploadPosition():
     try:
         postData(doc)
     except urllib2.HTTPError, e:
-        habitatStatusLabel.setText("Unable to upload data!")
+        logging.error("Unable to upload data!")
         return
 
-    habitatStatusLabel.setText("Uploaded Data at: %s" % ISOStringNow())
+    logging.info("Uploaded Position Data at: %s" % ISOStringNow())
 
-
-def uploadTimer():
-    if position_valid:
-        try:
-            if uploadEnabled.isChecked():
-                uploadPosition()
-        except:
-            pass
-
-timer = QtCore.QTimer()
-timer.timeout.connect(uploadTimer)
-timer.start(update_rate*1000)
-
-def readQueue():
-    try:
-        data = rxqueue.get_nowait()
-        parseNMEA(data)
-    except:
-        pass
-
-timer2 = QtCore.QTimer()
-timer2.timeout.connect(readQueue)
-timer2.start(200)
 
 # Start UDP Listener Thread
 serial_running = True
 def serialListener():
-    try:
-        ser = serial.Serial(port=serial_port,baudrate=serial_baud,timeout=5)
-    except Exception as e:
-        gpsStatusLabel.setText("Serial Port Error: %s" % e)
-        return
+    """ Serial Port Listener Thread
+        Parse incoming serial data as NMEA and update global position variables
+    """
+    global serial_running, serial_port, serial_baud
+    _ser = None
 
     while serial_running:
-        data = ser.readline()
+        # Attempt to connect to the serial port.
+        while _ser == None:
+            try:
+                _ser = serial.Serial(port=serial_port,baudrate=serial_baud,timeout=5)
+                logging.info("Connected to serial port.")
+            except Exception as e:
+                # Continue re-trying until we can connect to the serial port.
+                # This should let the user connect the gps *after* this script starts if required.
+                logging.error("Serial Port Error: %s" % e)
+                logging.error("Sleeping 10s before attempting re-connect.")
+                time.sleep(10)
+                _ser = None
+                continue
+
+        # Read a line of (hopefully) NMEA from the serial port.
         try:
-            rxqueue.put_nowait(data)
+            data = _ser.readline()
+        except:
+            # If we hit a serial read error, attempt to reconnect.
+            logging.error("Error reading from serial device! Attempting to reconnect.")
+            _ser = None
+            continue
+
+        # Attempt to parse data.
+        try:
+            parseNMEA(data)
         except:
             pass
 
-    ser.close()
+    # Clean up before exiting thread.
+    _ser.close()
+    logging.info("Closing Serial Thread.")
 
-t = Thread(target=serialListener)
-t.start()
+
+upload_loop_running = True
+last_upload_time = time.time()
+def uploadLoop():
+    """ Habitat Uploader Thread.
+        Every X seconds, upload current position to Habitat (if it is valid).
+    """
+    global position_valid, update_rate, upload_loop_running, last_upload_time
+    while upload_loop_running:
+        if position_valid:
+            if (time.time() - last_upload_time) > update_rate:
+                uploadPosition()
+                last_upload_time = time.time()
+
+        time.sleep(0.5)
+
+    logging.info("Closing Habitat Upload Thread.")
 
 ## Start Qt event loop unless running in interactive mode or using pyside.
 if __name__ == '__main__':
-    if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
-        QtGui.QApplication.instance().exec_()
-        serial_running = False
+    logging.basicConfig(format='%(asctime)s %(levelname)s:%(message)s', level=logging.INFO)
+    logging.info("Starting Serial Listener Thread.")
+    serial_thread = Thread(target=serialListener)
+    serial_thread.start()
+
+    time.sleep(5)
+
+    logging.info("Starting Habitat Uploader Thread.")
+    habitat_thread = Thread(target=uploadLoop)
+    habitat_thread.start()
+
+    # Sleep until die.
+    while True:
+        try:
+            time.sleep(1)
+        except KeyboardInterrupt:
+            upload_loop_running = False
+            serial_running = False
+            sys.exit(1)
+
+
+
