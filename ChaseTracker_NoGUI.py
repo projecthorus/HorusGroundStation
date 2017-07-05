@@ -33,6 +33,7 @@ speed = 0 # m/s
 # Broadcast our position within the local network via UDP broadcast,
 # so other applications can make use of it.
 def gps_via_udp():
+    global lat,lon,alt,speed,position_valid
     packet = {
         'type' : 'GPS',
         'latitude': lat,

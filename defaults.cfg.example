@@ -15,11 +15,13 @@ password = AAA
 # True makes the user show up as a radio mast instead of a Car on the Habitat map.
 stationary = False
 
+
 [Payload]
 # Payload Callsign, for uploads to Habitat
 # Received binary telemetry is converted to an ASCII sentence, with this callsign.
 payload_callsign = HORUSLORA
 
+# This section is used by ChaseTracker and ChaseTracker_NoGUI
 [GPS]
 # Does what it says on the tin. Helps avoid calls from parents during balloon chases. Units in km/hr.
 speed_cap = 110
@@ -30,3 +32,17 @@ serial_port = /dev/ttyUSB0
 serial_baud = 57600
 # How often to update chasecar position on habhub (seconds)
 update_rate = 30
+
+# This section is used by RotatorGUI
+[Rotator]
+# Rotator Type. This must be either rotctld or pstrotator
+rotator_type = pstrotator
+#rotator_type = rotctld
+# Hostname/port of a machine running rotctld or pstrotator
+rotator_hostname = localhost
+# Port number for rotctld (TCP) and pstrotator (UDP)
+rotctld_port = 4533
+pstrotator_port = 12000
+# Poll rotator every X seconds for position.
+rotator_poll_rate = 5
+
