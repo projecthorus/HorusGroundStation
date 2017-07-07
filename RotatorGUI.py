@@ -7,8 +7,9 @@
 #
 #
 # TODO LIST:
-# [ ] Make location/az/el overrides work
+# [x] Make location/az/el overrides work
 # [ ] Handle +/- 180 degree azimuth better for some rotctld rotators.
+# [ ] Allow for azimuth-only rotators.
 # [ ] Test on real hardware!
 # [ ] Get payload positions from other sources.
 #     [ ] Habitat ?
@@ -201,17 +202,7 @@ exitAction.setShortcut('Ctrl+Q')
 exitAction.setStatusTip('Exit application')
 exitAction.triggered.connect(QtGui.qApp.quit)
 
-myPosOverrideAction = QtGui.QAction('&My Position', mainwin)
-myPosOverrideAction.setShortcut('Ctrl+M')
-myPosOverrideAction.setStatusTip('Set My Latitude, Longitude, and Altitude Manually')
 
-payloadPosOverrideAction = QtGui.QAction('&Payload Position', mainwin)
-payloadPosOverrideAction.setShortcut('Ctrl+P')
-payloadPosOverrideAction.setStatusTip('Set Payload Latitude, Longitude, and Altitude Manually')
-
-rotatorOverrideAction = QtGui.QAction('&Rotator Position', mainwin)
-rotatorOverrideAction.setShortcut('Ctrl+R')
-rotatorOverrideAction.setStatusTip('Set Rotator Azimuth/Elevation Manually')
 
 menubar = mainwin.menuBar()
 menubar.setNativeMenuBar(False)
@@ -219,9 +210,6 @@ fileMenu = menubar.addMenu('&File')
 fileMenu.addAction(exitAction)
 
 settingsMenu = menubar.addMenu('&Overrides')
-settingsMenu.addAction(myPosOverrideAction)
-settingsMenu.addAction(payloadPosOverrideAction)
-settingsMenu.addAction(rotatorOverrideAction)
 
 # Finalise and show the window
 mainwin.setWindowTitle("Horus Rotator Control")
@@ -314,6 +302,118 @@ rotator_poll_timer = QtCore.QTimer()
 rotator_poll_timer.timeout.connect(poll_rotator)
 rotator_poll_timer.start(rotator_poll_rate*1000)
 
+
+def override_location():
+    """ Allow user to set a manual location """
+    global MY_LATITUDE, MY_LONGITUDE, MY_ALTITUDE, MY_DATA_VALID, MY_DATA_AGE
+    global myDataLatitudeValue, myDataLongitudeLabel, myDataLatitudeValue, myDataFixLocation
+
+    text, ok = QtGui.QInputDialog.getText(main_widget,'Set Manual Location', 'New Location: lat,lon,alt ')
+
+    if ok:
+        try:
+            _params = text.split(',')
+            _latitude = float(_params[0])
+            _longitude = float(_params[1])
+            _altitude = float(_params[2])
+
+            # Update global variables.
+            MY_LATITUDE = _latitude
+            MY_LONGITUDE = _longitude
+            MY_ALTITUDE = _altitude
+            MY_DATA_VALID = True
+
+            # Update GUI Labels
+            myDataLatitudeValue.setText("%.5f" % MY_LATITUDE)
+            myDataLongitudeValue.setText("%.5f" % MY_LONGITUDE)
+            myDataAltitudeValue.setText("%d" % int(MY_ALTITUDE))
+
+            myDataFixLocation.setChecked(True)
+            calculate_az_el_range()
+
+        except:
+            logging.error("Invalid manual location entered.")
+            _msgBox = QtGui.QMessageBox()
+            _msgBox.setText("Invalid entry format!")
+            _msgBox.exec_()
+
+myPosOverrideAction = QtGui.QAction('&My Position', mainwin)
+myPosOverrideAction.setShortcut('Ctrl+M')
+myPosOverrideAction.setStatusTip('Set My Latitude, Longitude, and Altitude Manually')
+myPosOverrideAction.triggered.connect(override_location)
+settingsMenu.addAction(myPosOverrideAction)
+
+def override_payload_position():
+    """ Allow user to set a manual payload position """
+    global PAYLOAD_LATITUDE, PAYLOAD_LONGITUDE, PAYLOAD_ALTITUDE, PAYLOAD_DATA_VALID, PAYLOAD_DATA_AGE
+    global payloadDataLatitudeValue, payloadDataLongitudeValue, payloadDataAltitudeValue, rotatorHoldButton
+
+    text, ok = QtGui.QInputDialog.getText(main_widget,'Set Manual Payload Position', 'New Position: lat,lon,alt ')
+
+    if ok:
+        try:
+            _params = text.split(',')
+            _latitude = float(_params[0])
+            _longitude = float(_params[1])
+            _altitude = float(_params[2])
+
+            # Update global variables.
+            PAYLOAD_LATITUDE = _latitude
+            PAYLOAD_LONGITUDE = _longitude
+            PAYLOAD_ALTITUDE = _altitude
+            PAYLOAD_DATA_VALID = True
+
+            # Update GUI Labels
+            payloadDataAltitudeValue.setText("%5dm" % int(PAYLOAD_ALTITUDE))
+            payloadDataLatitudeValue.setText("%.5f" % PAYLOAD_LATITUDE)
+            payloadDataLongitudeValue.setText("%.5f" % PAYLOAD_LONGITUDE)
+
+            rotatorHoldButton.setChecked(True)
+            calculate_az_el_range()
+
+        except:
+            logging.error("Invalid manual location entered.")
+            _msgBox = QtGui.QMessageBox()
+            _msgBox.setText("Invalid entry format!")
+            _msgBox.exec_()
+
+payloadPosOverrideAction = QtGui.QAction('&Payload Position', mainwin)
+payloadPosOverrideAction.setShortcut('Ctrl+P')
+payloadPosOverrideAction.setStatusTip('Set Payload Latitude, Longitude, and Altitude Manually')
+payloadPosOverrideAction.triggered.connect(override_payload_position)
+settingsMenu.addAction(payloadPosOverrideAction)
+
+def override_azel():
+    """ Allow user to set a manual azimuth and elevation """
+    global azimuthValue, elevationValue, rotatorHoldButton
+    global PAYLOAD_AZIMUTH, PAYLOAD_ELEVATION, PAYLOAD_DATA_VALID
+    text, ok = QtGui.QInputDialog.getText(main_widget,'Set Manual Azimuth and Elevation', 'New Position: azimuth,elevation')
+
+    if ok:
+        try:
+            _params = text.split(',')
+            _azimuth = float(_params[0])
+            _elevation = float(_params[1])
+
+            # Update global variables.
+            PAYLOAD_AZIMUTH = _azimuth
+            PAYLOAD_ELEVATION = _elevation
+            PAYLOAD_DATA_VALID = True
+            rotator_update()
+
+            rotatorHoldButton.setChecked(True)
+
+        except:
+            logging.error("Invalid manual position entered.")
+            _msgBox = QtGui.QMessageBox()
+            _msgBox.setText("Invalid entry format!")
+            _msgBox.exec_()
+
+rotatorOverrideAction = QtGui.QAction('&Rotator Position', mainwin)
+rotatorOverrideAction.setShortcut('Ctrl+R')
+rotatorOverrideAction.setStatusTip('Set Rotator Azimuth/Elevation Manually')
+rotatorOverrideAction.triggered.connect(override_azel)
+settingsMenu.addAction(rotatorOverrideAction)
 
 def calculate_az_el_range():
     """ Calculate Azimuth/Elevation/Range from my location and Payload Data """
