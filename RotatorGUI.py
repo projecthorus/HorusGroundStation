@@ -405,6 +405,7 @@ def override_azel():
             PAYLOAD_AZIMUTH = _azimuth
             PAYLOAD_ELEVATION = _elevation
             PAYLOAD_DATA_VALID = True
+            rotatorHoldButton.setChecked(False)
             rotator_update()
 
             rotatorHoldButton.setChecked(True)
