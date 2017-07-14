@@ -112,9 +112,28 @@ This will enable ssh on next boot. You MUST do this before first boot, else SSH 
 
 	exit 0
 
-	Optionally you might want to run TelemetryUpload.py on boot as well, run python TelemetryUpload.py --help to check command line options.
+	Optionally you might want to run TelemetryUpload.py on boot as well. Add the following line below the LoRaUDPServer line:
+	    python /home/YOURUSERNAME/HorusGroundStation/TelemetryUpload.py YOURCALLSIGN &
 
-	Another neat trick is to run the script within screen, so the output can be viewed if issues arise. 
+	Another neat trick is to run the script within screen, so the output can be viewed if issues arise:
+	    su - yourusername -c "screen -dm -S lora /path/to/script/to/run"
+
+
+13. GPS UDP-Broadcast Server
+    If running, this will push out GPS position data out via UDP broadcast, and also push the receiver position
+    to Habitat, either as a chase car, or as a stationary receiver (see default.cfg.example for info).
+	Edit /etc/udev/rules.d/99-usb-serial.rules  and add in:
+
+	    SUBSYSTEM=="tty", ATTRS{idVendor}=="1546", ATTRS{idProduct}=="01a7", SYMLINK+="gps"
+
+	Replace the above usb vendor and product IDs as appropriate.
+	Restart, and connect the GPS. A symlink shoudl be created at 
+
+	Copy defaults.cfg.example to defaults.cfg and edit as appropriate (callsign, serial port, baud rate).
+
+	Add the following line under the loraudpserver line in rc.local if you want to run this at boot:
+	    python /home/YOURUSERNAME/HorusGroundStation/ChaseTracker_NoGUI.py &
+
 
 13. Reboot and check it works!
 	> sudo shutdown -r now

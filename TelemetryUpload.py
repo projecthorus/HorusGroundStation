@@ -19,6 +19,7 @@ udp_listener_running = False
 parser = argparse.ArgumentParser()
 parser.add_argument("callsign", help="Listener Callsign")
 parser.add_argument("-l","--log_file",default="telemetry.log",help="Log file for RX Telemetry")
+parser.add_argument("--summary",default=False,action='store_true',help="Emit Payload Summary message via UDP broadcast on valid packet.")
 args = parser.parse_args()
 
 # Read in payload callsign from config file.
@@ -50,6 +51,16 @@ def write_log_entry(packet):
 	log.write(log_string)
 	log.close()
 
+def emit_payload_summary(telemetry):
+	""" Do some sanity checking on the telemetry, and then emit a a payload summary packet via UDP. """
+	# send_payload_summary(callsign, latitude, longitude, altitude, speed=-1, heading=-1)
+	_callsign = payload_callsign
+	_latitude = telemetry['latitude']
+	_longitude = telemetry['longitude']
+	_altitude = telemetry['altitude']
+
+	if (_latitude != 0.0) and (_longitude != 0.0):
+		send_payload_summary(_callsign, _latitude, _longitude, _altitude)
 
 def process_udp(udp_packet):
 	try:
@@ -71,6 +82,8 @@ def process_udp(udp_packet):
 		if payload_type == HORUS_PACKET_TYPES.PAYLOAD_TELEMETRY:
 			telemetry = decode_horus_payload_telemetry(payload)
 			sentence = telemetry_to_sentence(telemetry, payload_callsign=payload_callsign, payload_id=telemetry['payload_id'])
+			if args.summary is True:
+				emit_payload_summary(telemetry)
 			(success,error) = habitat_upload_payload_telemetry(telemetry, payload_callsign=payload_callsign, callsign=args.callsign)
 			if success:
 				print("Uploaded Successfuly!")

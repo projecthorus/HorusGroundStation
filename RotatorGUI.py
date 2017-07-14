@@ -337,11 +337,14 @@ def override_location():
             _msgBox.setText("Invalid entry format!")
             _msgBox.exec_()
 
+
+# Add menu option.
 myPosOverrideAction = QtGui.QAction('&My Position', mainwin)
 myPosOverrideAction.setShortcut('Ctrl+M')
 myPosOverrideAction.setStatusTip('Set My Latitude, Longitude, and Altitude Manually')
 myPosOverrideAction.triggered.connect(override_location)
 settingsMenu.addAction(myPosOverrideAction)
+
 
 def override_payload_position():
     """ Allow user to set a manual payload position """
@@ -377,11 +380,14 @@ def override_payload_position():
             _msgBox.setText("Invalid entry format!")
             _msgBox.exec_()
 
+
+# Add menu option.
 payloadPosOverrideAction = QtGui.QAction('&Payload Position', mainwin)
 payloadPosOverrideAction.setShortcut('Ctrl+P')
 payloadPosOverrideAction.setStatusTip('Set Payload Latitude, Longitude, and Altitude Manually')
 payloadPosOverrideAction.triggered.connect(override_payload_position)
 settingsMenu.addAction(payloadPosOverrideAction)
+
 
 def override_azel():
     """ Allow user to set a manual azimuth and elevation """
@@ -409,11 +415,14 @@ def override_azel():
             _msgBox.setText("Invalid entry format!")
             _msgBox.exec_()
 
+
+# Add menu option.
 rotatorOverrideAction = QtGui.QAction('&Rotator Position', mainwin)
 rotatorOverrideAction.setShortcut('Ctrl+R')
 rotatorOverrideAction.setStatusTip('Set Rotator Azimuth/Elevation Manually')
 rotatorOverrideAction.triggered.connect(override_azel)
 settingsMenu.addAction(rotatorOverrideAction)
+
 
 def calculate_az_el_range():
     """ Calculate Azimuth/Elevation/Range from my location and Payload Data """
@@ -448,7 +457,6 @@ def calculate_az_el_range():
     # Update rotator position!
     rotator_update()
 
-   
 
 def update_payload_stats(packet):
     """ Parse a Payload Summary UDP Packet and update the payload location fields """
@@ -509,7 +517,6 @@ def process_udp(udp_packet):
         elif packet_dict['type'] == 'GPS':
             update_my_stats(packet_dict)
         else:
-            print(".")
             pass
             #print("Got other packet type (%s)" % packet_dict['type'])
 
@@ -519,6 +526,7 @@ def process_udp(udp_packet):
 
 udp_listener_running = False
 def udp_rx_thread():
+    """ Listen for broadcast UDP packets from ChaseTracker / HorusGroundStation, and push into a queue """
     global udp_listener_running
     s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
     s.settimeout(1)
@@ -544,6 +552,7 @@ def udp_rx_thread():
 
 
 def read_queue():
+    """ Read a packet from the Queue """
     global myDataStatus, payloadDataStatus, PAYLOAD_DATA_AGE, MY_DATA_AGE
     try:
         packet = rxqueue.get_nowait()
