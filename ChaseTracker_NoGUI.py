@@ -1,8 +1,17 @@
 #!/usr/bin/env python
 #
 # ChaseTracker - No GUI Version
-# Written by: Mark Jessop <vk5qi@rfhead.net> (C) 2015
+# Written by: Mark Jessop <vk5qi@rfhead.net> (C) 2017
 #
+# Upload chase car (or stationary listener) positions to Habitat, for plotting on the map.
+# Also pushes 'GPS' UDP broadcast packets into the local network, 
+# for use by SummaryGUI, RotatorGUI and HorusGroundStation.
+#
+# Usage: python ChaseTracker_NoGUI.py
+# All settings are read from defaults.cfg. 
+#
+
+
 import urllib2, json, ConfigParser, sys, time, serial, socket, re, logging
 from threading import Thread
 from base64 import b64encode

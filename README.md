@@ -45,10 +45,11 @@ There are a few example client applications in this repository. Make a copy of d
   * This reads some user settings (Callsign, Cutdown Password) from defaults.cfg
 * HorusMessenger.py - Basic text-messenger GUI application. Partially deprecated with the addition of 'status' messages to the main HorusGroundStation GUI.
 * PacketSniffer.py - Console application which prints a textual representation of all LoRaUDPServer UDP broadcast packets seen on the local network.
-* TelemetryUpload.py - Listens for payload telemetry, and uploads to Habitat.
+* TelemetryUpload.py - Listens for payload telemetry, and uploads to Habitat. Can also push a 'summary' of the telemetry into the local network. Intended for headless receiver use.
 * ChaseTracker.py - Pushes chase car positions from a local GPS (configured in defaults.cfg) to Habitat, and also into the local network via UDP broadcast.
-* ChaseTrackerNoGUI.py - Same as above, but with no GUI, suitable for Headless use.
+* ChaseTrackerNoGUI.py - Same as above, but with no GUI, suitable for headless use.
 * SummaryGUI.py - A 'Heads Up' GUI with just the basic payload information. Used in my chase car to provide a quick-look display to the driver.
+* RotatorGUI.py - Basic rotctld / PSTRotator control, using data from the UDP packets from ChaseTracker (GPS) and HorusGroundStation or TelemetryUpload (Payload Position)
 
 
 
