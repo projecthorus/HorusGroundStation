@@ -15,11 +15,20 @@ password = AAA
 # True makes the user show up as a radio mast instead of a Car on the Habitat map.
 stationary = False
 
-
+# Settings relating to handling of payload telemetry data.
 [Payload]
 # Payload Callsign, for uploads to Habitat
 # Received binary telemetry is converted to an ASCII sentence, with this callsign.
 payload_callsign = HORUSLORA
+
+# Settings relating to send data around the local network
+[Interface]
+# Where oziplotter (or OziMux) is running.
+oziplotter_host = 127.0.0.1
+oziplotter_port = 8942
+
+# Enable emission of a payload summary packet on recepit of a telemetry frame
+enable_payload_summary = True
 
 # This section is used by ChaseTracker and ChaseTracker_NoGUI
 [GPS]

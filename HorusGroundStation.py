@@ -15,6 +15,8 @@ import ConfigParser
 udp_broadcast_port = HORUS_UDP_PORT
 udp_listener_running = False
 
+
+
 foxtrot_log = "foxtrot.log"
 groundstation_log = "groundstation.log"
 
@@ -48,6 +50,9 @@ myspeed = 0.0
 upload_cars_to_ozi = True
 upload_telemetry_to_ozi = True
 upload_telemetry_to_foxtrot = True
+emit_payload_summary = True
+oziplotter_port = HORUS_OZIPLOTTER_PORT
+oziplotter_host = "127.0.0.1"
 
 
 # Widgets
@@ -570,6 +575,9 @@ try:
     myCallsignValue.setText(callsign)
     password = config.get('User','password')
     cutdownParameterPassword.setText(password)
+    emit_payload_summary = config.get('Interface', 'enable_payload_summary')
+    oziplotter_port = config.getint('Interface', 'oziplotter_port')
+    oziplotter_host = config.get('Interface', 'oziplotter_host')
 except:
     print("Problems reading configuration file, skipping...")
 
@@ -755,11 +763,12 @@ def processPacket(packet):
         lastlon = telemetry['longitude']
         lasttime = telemetry['time_biseconds']*2
 
-        send_payload_summary(callsign="LoRa", latitude=telemetry['latitude'], longitude=telemetry['longitude'], altitude=telemetry['altitude'], speed=calculated_speed, heading=-1)
+        if emit_payload_summary:
+            send_payload_summary(callsign="LoRa", latitude=telemetry['latitude'], longitude=telemetry['longitude'], altitude=telemetry['altitude'], speed=calculated_speed, heading=-1, short_time = telemetry['time'])
 
 
         if upload_telemetry_to_ozi:
-            oziplotter_upload_basic_telemetry(telemetry)
+            oziplotter_upload_basic_telemetry(telemetry, hostname=oziplotter_host, udp_port=oziplotter_port)
 
         if upload_telemetry_to_foxtrot:
             foxtrot_update(telemetry)
@@ -792,7 +801,7 @@ def processPacket(packet):
         if upload_cars_to_ozi:
             # Don't plot your own position. OziExplorer handles that just fine.
             if car_telem['callsign'] != str(myCallsignValue.text()):
-                oziplotter_upload_car_telemetry(car_telem)
+                oziplotter_upload_car_telemetry(car_telem, hostname=oziplotter_host, udp_port=oziplotter_port)
 
 
 

@@ -769,41 +769,41 @@ def habitat_upload_payload_telemetry(telemetry, payload_callsign = "HORUSLORA", 
 # OziPlotter Upload Functions
 
 # Deprecated OziPlotter upload function (using the complete HORUSLORA sentence, as uploaded to habitat)
-def oziplotter_upload_telemetry(telemetry,hostname="127.0.0.1"):
+def oziplotter_upload_telemetry(telemetry,hostname="127.0.0.1", udp_port = HORUS_OZIPLOTTER_PORT):
     sentence = telemetry_to_sentence(telemetry)
 
     try:
         ozisock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-        ozisock.sendto(sentence,(hostname,HORUS_OZIPLOTTER_PORT))
+        ozisock.sendto(sentence,(hostname, udp_port))
         ozisock.close()
     except Exception as e:
         print("Failed to send to Ozi: " % e)
 
 # The new 'generic' OziPlotter upload function, with no callsign, or checksumming (why bother, really)
-def oziplotter_upload_basic_telemetry(telemetry,hostname="127.0.0.1"):
+def oziplotter_upload_basic_telemetry(telemetry, hostname="127.0.0.1", udp_port = HORUS_OZIPLOTTER_PORT):
     sentence = "TELEMETRY,%s,%.5f,%.5f,%d\n" % (telemetry['time'],telemetry['latitude'], telemetry['longitude'],telemetry['altitude'])
 
     try:
         ozisock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-        ozisock.sendto(sentence,(hostname,HORUS_OZIPLOTTER_PORT))
+        ozisock.sendto(sentence,(hostname,udp_port))
         ozisock.close()
     except Exception as e:
         print("Failed to send to Ozi: " % e)
 
 # Push a car waypoint into OziPlotter. Could be used for other waypoints too.
-def oziplotter_upload_car_telemetry(car_telem, hostname="127.0.0.1"):
+def oziplotter_upload_car_telemetry(car_telem, hostname="127.0.0.1", udp_port = HORUS_OZIPLOTTER_PORT):
     sentence = "WAYPOINT,%s,%.5f,%.5f,%s\n" % (car_telem['callsign'], car_telem['latitude'], car_telem['longitude'], car_telem['message'])
 
     try:
         ozisock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)
-        ozisock.sendto(sentence,(hostname,HORUS_OZIPLOTTER_PORT))
+        ozisock.sendto(sentence,(hostname,udp_port))
         ozisock.close()
     except Exception as e:
         print("Failed to send to Ozi: " % e)
 
 # Send an update on the core payload telemetry statistics into the network via UDP broadcast.
 # This can be used by other devices hanging off the network to display vital stats about the payload.
-def send_payload_summary(callsign, latitude, longitude, altitude, speed=-1, heading=-1):
+def send_payload_summary(callsign, latitude, longitude, altitude, speed=-1, heading=-1, short_time=None):
     packet = {
         'type' : 'PAYLOAD_SUMMARY',
         'callsign' : callsign,
@@ -811,8 +811,12 @@ def send_payload_summary(callsign, latitude, longitude, altitude, speed=-1, head
         'longitude' : longitude,
         'altitude' : altitude,
         'speed' : speed,
-        'heading': heading
+        'heading': heading,
     }
+
+    # Optionally add in a time field, which should always be of the form HH:MM:SS
+    if short_time != None:
+        packet['time'] = short_time
 
     # Set up our UDP socket
     s = socket.socket(socket.AF_INET,socket.SOCK_DGRAM)

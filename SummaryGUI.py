@@ -20,6 +20,7 @@ udp_listener_running = False
 rxqueue = Queue.Queue(16)
 
 # Local Payload state variables.
+use_supplied_time = False
 payload_latitude = 0.0
 payload_longitude = 0.0
 payload_altitude = 0.0
@@ -130,10 +131,24 @@ def calculate_az_el_range():
     
 
 def update_payload_stats(packet):
-    global payload_latitude, payload_longitude, payload_altitude, payload_lastdata, payload_data_age, altitudeValue, speedValue, ascrateValue
+    global payload_latitude, payload_longitude, payload_altitude, payload_lastdata, payload_data_age, altitudeValue, speedValue, ascrateValue, use_supplied_time
     try:
-        timestamp = time.time()
+        # Attempt to parse a timestamp from the supplied packet.
+        try:
+            packet_time = datetime.strptime(packet['time'], "%H:%M:%S")
+            # Insert the hour/minute/second data into the current UTC time.
+            packet_dt = datetime.utcnow().replace(hour=packet_time.hour, minute=packet_time.minute, second=packet_time.second, microsecond=0)
+            # Convert into a unix timestamp:
+            timestamp = (packet_dt - datetime(1970, 1, 1)).total_seconds()
+        except:
+            # If no timestamp is provided, use system time instead.
+            print("No time provided, using system time.")
+            packet_dt = datetime.utcnow()
+            timestamp = (packet_dt - datetime(1970, 1, 1)).total_seconds()
+
+        # Get the time difference in seconds.
         time_diff = timestamp - payload_lastdata
+        print(time_diff)
 
         new_latitude = packet['latitude']
         new_longitude = packet['longitude']
@@ -196,7 +211,7 @@ def process_udp(udp_packet):
         elif packet_dict['type'] == 'GPS':
             update_car_stats(packet_dict)
         else:
-            print(".")
+            #print(".")
             pass
             #print("Got other packet type (%s)" % packet_dict['type'])
 
