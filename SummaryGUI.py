@@ -148,7 +148,6 @@ def update_payload_stats(packet):
 
         # Get the time difference in seconds.
         time_diff = timestamp - payload_lastdata
-        print(time_diff)
 
         new_latitude = packet['latitude']
         new_longitude = packet['longitude']
