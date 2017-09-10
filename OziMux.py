@@ -15,6 +15,7 @@ import logging
 import Queue
 from threading import Thread
 from PyQt4 import QtGui, QtCore
+from HorusPackets import *
 
 # RX Message queue to avoid threading issues.
 rxqueue = Queue.Queue(32)
@@ -39,6 +40,7 @@ class TelemetryListener(object):
                 oziplotter_port = 8942,
                 input_port = "55680",
                 output_enabled = False,
+                summary_enabled = False,
                 pass_waypoints = True,
                 callback = None):
 
@@ -46,6 +48,7 @@ class TelemetryListener(object):
         self.ozi_host = (oziplotter_host, oziplotter_port)
         self.input_port = input_port
         self.output_enabled = output_enabled
+        self.summary_enabled = summary_enabled
         self.pass_waypoints = pass_waypoints
         self.callback = callback
 
@@ -55,7 +58,7 @@ class TelemetryListener(object):
         self.t.start()
 
 
-    def enable(self, enabled):
+    def enable_output(self, enabled):
         """
         Set the output enabled flag.
         """
@@ -63,6 +66,15 @@ class TelemetryListener(object):
             self.output_enabled = True
         else:
             self.output_enabled = False
+
+    def enable_summary(self, enabled):
+        """
+        Set the output enabled flag.
+        """
+        if enabled:
+            self.summary_enabled = True
+        else:
+            self.summary_enabled= False
 
 
     def attach_callback(self, callback):
@@ -121,6 +133,23 @@ class TelemetryListener(object):
             print("ERROR: Failed to send to OziPlotter: %s" % e)
 
 
+    def send_packet_summary(self, packet):
+        """
+        Attempt to parse the incoming packet into fields and send out a payload summary UDP message
+        """
+
+        try:
+            _fields = packet.split(',')
+            _short_time = _fields[1]
+            _lat = float(_fields[2])
+            _lon = float(_fields[3])
+            _alt = int(_fields[4])
+
+            send_payload_summary("MUX", _lat, _lon, _alt, short_time = _short_time)
+        except:
+            traceback.print_exc()
+
+
     def handle_packet(self, packet):
         """
         Check an incoming packet matches a valid type, and then forward it on.
@@ -143,6 +172,9 @@ class TelemetryListener(object):
         # Now send on the packet if we are allowed to.
         if packet_type == "TELEMETRY" and self.output_enabled:
             self.send_packet_to_ozi(packet)
+
+        if packet_type == "TELEMETRY" and self.output_enabled and self.summary_enabled:
+            self.send_packet_summary(packet)
 
         # Generally we always want to pass on waypoint data.
         if packet_type == "WAYPOINT" and self.pass_waypoints:
@@ -269,6 +301,9 @@ inputSelector.addButton(input3Selected,2)
 inputSelector.addButton(input4Selected,3)
 inputSelector.setExclusive(True)
 
+enableSummaryOutput = QtGui.QCheckBox("Enable Payload Summary Output")
+enableSummaryOutput.setChecked(True)
+
 # Indexed access to widgets.
 inputTitles = [input1Title, input2Title, input3Title, input4Title]
 inputData = [input1Data, input2Data, input3Data, input4Data]
@@ -281,6 +316,7 @@ layout.addWidget(input1Frame)
 layout.addWidget(input2Frame)
 layout.addWidget(input3Frame)
 layout.addWidget(input4Frame)
+layout.addWidget(enableSummaryOutput)
 
 mainwin = QtGui.QMainWindow()
 
@@ -317,6 +353,7 @@ for n in range(num_inputs):
                             oziplotter_port = config['oziplotter_port'],
                             input_port = config['inputs'][input_list[n]]['port'],
                             output_enabled = config['inputs'][input_list[n]]['enabled_at_start'],
+                            summary_enabled = config['inputs'][input_list[n]]['enabled_at_start'],
                             callback = telemetry_callback)
 
     listener_objects.append(_obj)
@@ -332,11 +369,14 @@ def handle_checkbox():
     _checked_id = inputSelector.checkedId()
     for n in range(num_inputs):
         if n == _checked_id:
-            listener_objects[n].enable(True)
+            listener_objects[n].enable_output(True)
+            listener_objects[n].enable_summary(enableSummaryOutput.isChecked())
         else:
-            listener_objects[n].enable(False)
+            listener_objects[n].enable_output(False)
+            listener_objects[n].enable_summary(False)
 
 inputSelector.buttonClicked.connect(handle_checkbox)
+enableSummaryOutput.stateChanged.connect(handle_checkbox)
 
 
 def handle_telemetry(input_name, packet):

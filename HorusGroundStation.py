@@ -575,7 +575,7 @@ try:
     myCallsignValue.setText(callsign)
     password = config.get('User','password')
     cutdownParameterPassword.setText(password)
-    emit_payload_summary = config.get('Interface', 'enable_payload_summary')
+    emit_payload_summary = config.getboolean('Interface', 'enable_payload_summary')
     oziplotter_port = config.getint('Interface', 'oziplotter_port')
     oziplotter_host = config.get('Interface', 'oziplotter_host')
 except:
