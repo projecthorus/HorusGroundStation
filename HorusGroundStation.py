@@ -764,7 +764,7 @@ def processPacket(packet):
         lasttime = telemetry['time_biseconds']*2
 
         if emit_payload_summary:
-            send_payload_summary(callsign="LoRa", latitude=telemetry['latitude'], longitude=telemetry['longitude'], altitude=telemetry['altitude'], speed=calculated_speed, heading=-1, short_time = telemetry['time'])
+            send_payload_summary(callsign="Horus Ground Station", latitude=telemetry['latitude'], longitude=telemetry['longitude'], altitude=telemetry['altitude'], speed=calculated_speed, heading=-1, short_time = telemetry['time'])
 
 
         if upload_telemetry_to_ozi:

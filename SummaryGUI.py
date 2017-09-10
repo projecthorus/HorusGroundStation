@@ -161,6 +161,7 @@ def update_payload_stats(packet):
         altitudeValue.setText("%5dm" % int(new_altitude))
         speedValue.setText("%3dkph" % int(speed))
         ascrateValue.setText("%2.1fm/s" % ascent_rate)
+        mainwin.setWindowTitle("Payload Summary - %s" % packet['callsign'])
 
         # Save payload state values.
         payload_latitude = new_latitude

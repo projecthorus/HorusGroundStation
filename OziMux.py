@@ -145,7 +145,7 @@ class TelemetryListener(object):
             _lon = float(_fields[3])
             _alt = int(_fields[4])
 
-            send_payload_summary("MUX", _lat, _lon, _alt, short_time = _short_time)
+            send_payload_summary(self.source_name, _lat, _lon, _alt, short_time = _short_time)
         except:
             traceback.print_exc()
 
