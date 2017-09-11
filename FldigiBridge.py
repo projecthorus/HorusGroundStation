@@ -84,34 +84,34 @@ class FldigiBridge(object):
 
             while self.rx_thread_running:
                 try:
-                    # Read a character.
-                    try:
-                        _char = _s.recv(1)
-                    except:
-                        if self.callback != None:
-                            self.callback("CONNECTION ERROR!")
-                        break
-
-                    # Append to input buffer.
-                    self.input_buffer += _char
-                    # Roll buffer if we've exceeded the max length.
-                    if len(self.input_buffer) > self.MAX_BUFFER_LEN:
-                        self.input_buffer = self.input_buffer[1:]
-
-                    # If we have received a newline, attempt to process the current buffer of data.
-                    if _char == '\n':
-                        self.process_data(self.input_buffer)
-                        # Clear the buffer and continue.
-                        self.input_buffer = ""
-                    else:
-                        continue
+                    _char = _s.recv(1)
+                except socket.timeout:
+                    # No data received? Keep trying...
+                    continue
                 except:
-                    traceback.print_exc()
+                    # Something else gone wrong? Try and kill the socket and re-connect.
+                    if self.callback != None:
+                        self.callback("CONNECTION ERROR!")
+
                     try:
                         _s.close()
-                        break
                     except:
-                        break
+                        pass
+                    break
+
+                # Append to input buffer.
+                self.input_buffer += _char
+                # Roll buffer if we've exceeded the max length.
+                if len(self.input_buffer) > self.MAX_BUFFER_LEN:
+                    self.input_buffer = self.input_buffer[1:]
+
+                # If we have received a newline, attempt to process the current buffer of data.
+                if _char == '\n':
+                    self.process_data(self.input_buffer)
+                    # Clear the buffer and continue.
+                    self.input_buffer = ""
+                else:
+                    continue
 
         _s.close()
 
