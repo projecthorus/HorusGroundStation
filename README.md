@@ -50,6 +50,8 @@ There are a few example client applications in this repository. Make a copy of d
 * ChaseTrackerNoGUI.py - Same as above, but with no GUI, suitable for headless use.
 * SummaryGUI.py - A 'Heads Up' GUI with just the basic payload information. Used in my chase car to provide a quick-look display to the driver.
 * RotatorGUI.py - Basic rotctld / PSTRotator control, using data from the UDP packets from ChaseTracker (GPS) and HorusGroundStation or TelemetryUpload (Payload Position)
+* OziMux.py - Multiplex telemetry data going into OziPlotter. Allows gathering of data from multiple sources, i.e. Fldigi, HorusGroundStation, Radiosonde, etc.
+* FldigiBridge.py - Receive UKHAS standard sentences from a local fldigi instance (TCP port 7322) and pass them onto OziMux. 
 
 
 
