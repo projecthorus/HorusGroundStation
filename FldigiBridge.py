@@ -3,18 +3,27 @@
 #   Project Horus 
 #   FlDigi -> OziMux Bridge
 #
-#   Receive sentences from FlDigi, and pass them onto OziMux or OziPlotter
+#   Receive sentences from FlDigi, and pass them onto OziMux or OziPlotter.
+#   Sentences must be of the form $$CALLSIGN,count,HH:MM:SS,lat,lon,alt,other,fields*CRC16
+#
+#   TODO:
+#   [ ] Accept host/port parameters via a config file.
+#   [ ] Better handling of connection timeouts.
+#   [ ] Display incoming data 'live'?
 #
 #   Copyright 2017 Mark Jessop <vk5qi@rfhead.net>
 #
 
 import socket
 import time
+import sys
+import Queue
 import crcmod
 import datetime
 import traceback
 from threading import Thread
 from HorusPackets import *
+from PyQt4 import QtGui, QtCore
 
 FLDIGI_PORT = 7322
 FLDIGI_HOST = '127.0.0.1'
@@ -64,20 +73,23 @@ class FldigiBridge(object):
                 _s.connect(self.fldigi_host)
             except socket.error as e:
                 print("ERROR: Could not connect to fldigi - %s" % str(e))
+                if self.callback != None:
+                    self.callback("ERROR: Could not connect to fldigi. Retrying...")
                 time.sleep(10)
                 continue
 
             # OK, now we're connected. Start reading in characters.
+            if self.callback != None:
+                    self.callback("CONNECTED - WAITING FOR DATA.")
+
             while self.rx_thread_running:
                 try:
                     # Read a character.
                     try:
                         _char = _s.recv(1)
-                    except socket.timeout:
-                        traceback.print_exc()
-                        continue
                     except:
-                        traceback.print_exc()
+                        if self.callback != None:
+                            self.callback("CONNECTION ERROR!")
                         break
 
                     # Append to input buffer.
@@ -177,17 +189,68 @@ class FldigiBridge(object):
             return
 
 
+rxqueue = Queue.Queue(32)
+data_age = 0.0
+
+
+# PyQt Window Setup
+app = QtGui.QApplication([])
+
+#
+# Create and Lay-out window
+#
+main_widget = QtGui.QWidget()
+layout = QtGui.QGridLayout()
+main_widget.setLayout(layout)
+# Create Widgets
+
+
+fldigiData = QtGui.QLabel("Not Connected.")
+fldigiData.setFont(QtGui.QFont("Courier New", 14, QtGui.QFont.Bold))
+fldigiAge = QtGui.QLabel("No Data Yet...")
+
+
+# Final layout of frames
+layout.addWidget(fldigiData)
+layout.addWidget(fldigiAge)
+
+
+mainwin = QtGui.QMainWindow()
+
+# Finalise and show the window
+mainwin.setWindowTitle("FlDigi Bridge")
+mainwin.setCentralWidget(main_widget)
+mainwin.resize(500,50)
+mainwin.show()
+
+def data_callback(data):
+    global rxqueue
+    rxqueue.put(data)
+
+def read_queue():
+    global fldigiData, fldigiAge, rxqueue, data_age
+    try:
+        packet = rxqueue.get_nowait()
+        fldigiData.setText(packet)
+        data_age = 0.0
+
+    except:
+        pass
+
+    # Update 'data age' text.
+    data_age += 0.1
+    fldigiAge.setText("Packet Data Age: %0.1fs" % data_age)
+
+# Start a timer to attempt to read a UDP packet every 100ms
+timer = QtCore.QTimer()
+timer.timeout.connect(read_queue)
+timer.start(100)
 
 
 if __name__ == "__main__":
-    def callback(data):
-        print(data)
 
-    _fldigi = FldigiBridge(callback=callback)
+    _fldigi = FldigiBridge(callback=data_callback)
 
-    # Run until we get Ctrl+C'd
-    try:
-        while True:
-            time.sleep(1)
-    except KeyboardInterrupt:
+    if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
+        QtGui.QApplication.instance().exec_()
         _fldigi.close()
