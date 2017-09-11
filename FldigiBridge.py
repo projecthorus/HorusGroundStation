@@ -1,9 +1,10 @@
 #!/usr/bin/env python2.7
 #
 #   Project Horus 
-#   OziPlotter Input Multiplexer
-#   Allow switching between multiple data sources for OziPlotter
-#   Also provide a unified source of 'Payload Summary' packets.
+#   FlDigi -> OziMux Bridge
+#
+#   Receive sentences from FlDigi, and pass them onto OziMux or OziPlotter
+#
 #   Copyright 2017 Mark Jessop <vk5qi@rfhead.net>
 #
 
@@ -37,7 +38,7 @@ class FldigiBridge(object):
                 fldigi_port = FLDIGI_PORT,
                 callback = None,
                 ):
-    
+
         self.output_hostname = output_hostname
         self.output_port = output_port
         self.fldigi_host = (fldigi_host, fldigi_port)
